@@ -44,7 +44,6 @@ jobs:
     timeout-minutes: 120
     environment: ios-release
     env:
-      ASC_KEY_PATH: ${{ runner.temp }}/AuthKey_HP4FPUF9XJ.p8
       ASC_KEY_ID: HP4FPUF9XJ
       ASC_ISSUER_ID: e7b8e10d-4fe3-4265-9580-59b786c3cbaf
       TESTFLIGHT_GROUP: qa
@@ -91,8 +90,10 @@ jobs:
             echo "ASC_KEY_CONTENT_BASE64 GitHub Environment secret is required." >&2
             exit 1
           fi
-          printf '%s' "$ASC_KEY_CONTENT_BASE64" | base64 -D > "$ASC_KEY_PATH"
-          chmod 600 "$ASC_KEY_PATH"
+          key_path="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf 'ASC_KEY_PATH=%s\n' "$key_path" >> "$GITHUB_ENV"
+          printf '%s' "$ASC_KEY_CONTENT_BASE64" | base64 -D > "$key_path"
+          chmod 600 "$key_path"
 
       - name: Select optional version overrides
         shell: bash
