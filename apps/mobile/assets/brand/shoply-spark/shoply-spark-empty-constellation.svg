@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="72" viewBox="0 0 96 72" fill="none">
+  <title>Shoply Spark Empty Constellation</title>
+  <path id="constellation" d="M18 49L36 26L56 42L77 19" stroke="#C5C7F8" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="4 5"/>
+  <circle cx="18" cy="49" r="5" fill="white" stroke="#6266F1" stroke-width="2.5"/>
+  <circle cx="36" cy="26" r="4" fill="#FF6F4E"/>
+  <circle cx="56" cy="42" r="5" fill="white" stroke="#17B879" stroke-width="2.5"/>
+  <path id="spark-pin" d="M77 8C78.2 13.7 80.8 16.8 86.5 18.7C81.6 20.3 79.3 23.4 78.5 28.5L77 36L75.5 28.5C74.7 23.8 72.3 21.1 67.5 19.8C73.2 17.6 75.8 13.9 77 8Z" fill="#6266F1"/>
+  <circle cx="77" cy="34" r="2" fill="#E6A400"/>
+  <path id="open-tail" d="M18 49C27 63 47 66 62 57" stroke="#E3E4FF" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

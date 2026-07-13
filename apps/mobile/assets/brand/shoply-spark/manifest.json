@@ -1,0 +1,27 @@
+{
+  "name": "Shoply Spark",
+  "version": "0.2.0-concept-source",
+  "status": "brand-validation-required",
+  "viewBoxPolicy": "Keep masters proportional; export 16/24/32 only after optical review.",
+  "colors": {
+    "discovery": "#6266F1",
+    "reaction": "#FF6F4E",
+    "trust": "#17B879",
+    "limitedNovelty": "#E6A400"
+  },
+  "assets": [
+    {"file": "shoply-spark-pin.svg", "moment": "spot", "motion": "seed-dot-to-pin", "durationMs": 220},
+    {"file": "shoply-spark-link-ticket.svg", "moment": "snap", "motion": "anchor-to-ticket", "durationMs": 220},
+    {"file": "shoply-spark-match-cluster.svg", "moment": "match", "motion": "three-points-converge", "durationMs": 720},
+    {"file": "shoply-spark-publish-seal.svg", "moment": "publish", "motion": "one-shot-seal", "durationMs": 760},
+    {"file": "shoply-spark-empty-constellation.svg", "moment": "empty", "motion": "none", "durationMs": 0},
+    {"file": "shoply-spark-signal-overlays.svg", "moment": "conditional-state", "motion": "none", "durationMs": 0}
+  ],
+  "rules": {
+    "ambientLoop": false,
+    "colorOnlyMeaning": false,
+    "reducedMotion": "Render the final static frame with no scale or orbit animation.",
+    "implementation": "Use SVG/react-native-svg and Reanimated; do not add a Lottie runtime for these assets.",
+    "semanticOverlays": "Reaction, verified, and exploration colors are conditional overlays only; never bake them into the default Match or Link masters."
+  }
+}

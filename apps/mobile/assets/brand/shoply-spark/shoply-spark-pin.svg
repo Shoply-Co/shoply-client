@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <title>Shoply Spark Pin</title>
+  <path id="spark-pin-body" d="M34 4C35.6 14.6 40.1 20.1 49 23.2L56 25.4L48 30.2C40.8 34.4 37.4 39.7 36 47.2L34 59L30 48C27.5 40.4 23.5 36.3 15 33.2L8 30.7L17.5 26.8C26.1 23.2 31 15.9 34 4Z" fill="#6266F1"/>
+  <path id="bag-handle" d="M26 23C26 17.9 29 14.75 33.5 14.75C38 14.75 41 17.9 41 23" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <path id="s-curve" d="M38 27.2C36.65 26 35.1 25.4 33.35 25.4C30.65 25.4 28.9 26.55 28.9 28.3C28.9 29.95 30.35 30.75 33.5 31.45C36.7 32.15 38.4 33.4 38.4 35.65C38.4 38.1 36.2 39.7 32.95 39.7C30.85 39.7 28.95 39.05 27.45 37.65" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <circle id="product-anchor-ring" cx="34" cy="55" r="4" fill="#6266F1" stroke="white" stroke-width="2"/>
+  <circle id="product-anchor-core" cx="34" cy="55" r="1.75" fill="#FF6F4E"/>
+</svg>

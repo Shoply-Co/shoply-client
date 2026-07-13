@@ -1,0 +1,1 @@
+export { PolicyConsentsPage } from "./ui";

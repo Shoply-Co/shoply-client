@@ -1,0 +1,1 @@
+export { goBackOrReplace } from "./back";

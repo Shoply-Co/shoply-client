@@ -1,0 +1,634 @@
+require "json"
+require "open3"
+require "shellwords"
+require "fileutils"
+require_relative "lib/shoply_release_version"
+
+SHOPLY_ROOT_DIR = File.expand_path("..", __dir__)
+SHOPLY_MOBILE_DIR = File.join(SHOPLY_ROOT_DIR, "apps/mobile")
+SHOPLY_IOS_DIR = File.join(SHOPLY_MOBILE_DIR, "ios")
+SHOPLY_APP_CONFIG = File.join(SHOPLY_MOBILE_DIR, "app.json")
+SHOPLY_EAS_CONFIG = File.join(SHOPLY_MOBILE_DIR, "eas.json")
+SHOPLY_XCODEPROJ = File.join(SHOPLY_IOS_DIR, "Shoply.xcodeproj")
+SHOPLY_PBXPROJ = File.join(SHOPLY_XCODEPROJ, "project.pbxproj")
+SHOPLY_WORKSPACE = File.join(SHOPLY_IOS_DIR, "Shoply.xcworkspace")
+SHOPLY_INFO_PLIST = File.join(SHOPLY_IOS_DIR, "Shoply/Info.plist")
+SHOPLY_ARTIFACTS_DIR = File.join(SHOPLY_ROOT_DIR, "artifacts/ios")
+
+SHOPLY_SCHEME = "Shoply"
+SHOPLY_BUNDLE_ID = "com.shply.app"
+SHOPLY_APPLE_APP_ID = "6754759017"
+SHOPLY_DEVELOPER_TEAM_ID = "XSGLM3JWK9"
+SHOPLY_ASC_ISSUER_ID = "e7b8e10d-4fe3-4265-9580-59b786c3cbaf"
+SHOPLY_ASC_KEY_ID = "HP4FPUF9XJ"
+SHOPLY_TESTFLIGHT_GROUP = "Shoply Beta"
+
+SHOPLY_RELEASE_ENVIRONMENTS = {
+  "testflight" => {
+    "EXPO_PUBLIC_APP_ENV" => "staging",
+    "EXPO_PUBLIC_RELEASE_PROFILE" => "testflight",
+    "EXPO_PUBLIC_API_BASE_URL" => "https://staging-api.shopplyapp.com/v1",
+    "EXPO_PUBLIC_OAUTH_REDIRECT_URI" => "shoply://auth/callback"
+  },
+  "production" => {
+    "EXPO_PUBLIC_APP_ENV" => "production",
+    "EXPO_PUBLIC_RELEASE_PROFILE" => "production",
+    "EXPO_PUBLIC_API_BASE_URL" => "https://api.shopplyapp.com/v1",
+    "EXPO_PUBLIC_OAUTH_REDIRECT_URI" => "shoply://auth/callback"
+  }
+}.freeze
+
+def shoply_ui
+  FastlaneCore::UI
+end
+
+def shoply_read_app_config
+  JSON.parse(File.read(SHOPLY_APP_CONFIG))
+rescue JSON::ParserError => error
+  shoply_ui.user_error!("apps/mobile/app.json is invalid JSON: #{error.message}")
+end
+
+def shoply_version_state
+  config = shoply_read_app_config.fetch("expo")
+  ios = config.fetch("ios")
+
+  {
+    version: config.fetch("version").to_s,
+    build_number: ios.fetch("buildNumber").to_s
+  }
+rescue KeyError => error
+  shoply_ui.user_error!("Missing Expo version field: #{error.message}")
+end
+
+def shoply_validate_version!(version, build_number)
+  unless version.match?(/\A\d+\.\d+\.\d+\z/)
+    shoply_ui.user_error!("APP_VERSION must use MAJOR.MINOR.PATCH format: #{version}")
+  end
+  unless build_number.match?(/\A[1-9]\d*\z/)
+    shoply_ui.user_error!("BUILD_NUMBER must be a positive integer: #{build_number}")
+  end
+end
+
+def shoply_sync_version_files!(version:, build_number:)
+  version = version.to_s
+  build_number = build_number.to_s
+  shoply_validate_version!(version, build_number)
+
+  config = shoply_read_app_config
+  config.fetch("expo")["version"] = version
+  config.fetch("expo").fetch("ios")["buildNumber"] = build_number
+  app_json = "#{JSON.pretty_generate(config)}\n"
+  File.write(SHOPLY_APP_CONFIG, app_json) if File.read(SHOPLY_APP_CONFIG) != app_json
+
+  project = File.read(SHOPLY_PBXPROJ)
+  marketing_count = project.scan(/MARKETING_VERSION = [^;]+;/).length
+  build_count = project.scan(/CURRENT_PROJECT_VERSION = [^;]+;/).length
+  if marketing_count < 2 || build_count < 2
+    shoply_ui.user_error!("Could not find both Debug and Release version settings in the Xcode project")
+  end
+
+  project = project.gsub(/MARKETING_VERSION = [^;]+;/, "MARKETING_VERSION = #{version};")
+  project = project.gsub(/CURRENT_PROJECT_VERSION = [^;]+;/, "CURRENT_PROJECT_VERSION = #{build_number};")
+  File.write(SHOPLY_PBXPROJ, project) if File.read(SHOPLY_PBXPROJ) != project
+
+  shoply_ui.success("Expo and Xcode versions are synchronized: #{version} (#{build_number})")
+  { version: version, build_number: build_number }
+end
+
+def shoply_sync_requested_version!(options = {})
+  current = shoply_version_state
+  requested = ShoplyReleaseVersion.requested_state(
+    current_version: current[:version],
+    current_build_number: current[:build_number],
+    requested_version: shoply_release_override(options, :version, "APP_VERSION"),
+    requested_build_number: shoply_release_override(options, :build_number, "BUILD_NUMBER")
+  )
+  shoply_validate_version!(requested[:version], requested[:build_number])
+
+  if requested[:version_changed] && !requested[:explicit_build_number]
+    shoply_ui.message("App version changed from #{current[:version]} to #{requested[:version]}; starting build number at 1")
+  end
+
+  shoply_sync_version_files!(version: requested[:version], build_number: requested[:build_number])
+end
+
+def shoply_release_override(options, option_name, environment_name)
+  option_value = options[option_name]
+  return option_value.to_s unless option_value.nil? || option_value.to_s.strip.empty?
+
+  environment_value = ENV[environment_name]
+  return nil if environment_value.nil? || environment_value.strip.empty?
+
+  environment_value
+end
+
+def shoply_api_key_path
+  File.expand_path(ENV.fetch("ASC_KEY_PATH", "~/Downloads/AuthKey_#{SHOPLY_ASC_KEY_ID}.p8"))
+end
+
+def shoply_validate_api_key_file!
+  path = shoply_api_key_path
+  shoply_ui.user_error!("App Store Connect API key was not found: #{path}") unless File.file?(path)
+
+  first_line = File.open(path, &:readline).strip
+  unless first_line.match?(/\A-----BEGIN (?:EC )?PRIVATE KEY-----\z/)
+    shoply_ui.user_error!("ASC_KEY_PATH does not point to a valid .p8 private key")
+  end
+
+  exposed_permission_bits = File.stat(path).mode & 0o077
+  unless exposed_permission_bits.zero?
+    shoply_ui.user_error!("Protect the API key before continuing: chmod 600 #{Shellwords.escape(path)}")
+  end
+
+  path
+rescue EOFError
+  shoply_ui.user_error!("ASC_KEY_PATH points to an empty file")
+end
+
+def shoply_app_store_api_key!
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID", SHOPLY_ASC_KEY_ID),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID", SHOPLY_ASC_ISSUER_ID),
+    key_filepath: shoply_validate_api_key_file!,
+    duration: 500,
+    in_house: false
+  )
+end
+
+def shoply_xcode_auth_args
+  # Xcode automatic signing uses the Apple account configured in Xcode.
+  # The App Store Connect .p8 key is reserved for Fastlane API/upload actions;
+  # using it for Xcode cloud signing can fail when the API key lacks that role.
+  "-allowProvisioningUpdates"
+end
+
+def shoply_with_release_environment(profile)
+  values = SHOPLY_RELEASE_ENVIRONMENTS.fetch(profile)
+  previous_values = values.to_h { |key, _value| [key, ENV[key]] }
+  values.each { |key, value| ENV[key] = value }
+
+  shoply_ui.message("Embedding #{profile} Expo public environment:")
+  values.each { |key, value| shoply_ui.message("  #{key}=#{value}") }
+  yield
+ensure
+  previous_values&.each do |key, value|
+    value.nil? ? ENV.delete(key) : ENV[key] = value
+  end
+end
+
+def shoply_build_ipa!(profile)
+  state = shoply_version_state
+  output_name = "Shoply-#{profile}-#{state[:version]}-#{state[:build_number]}.ipa"
+  auth_args = shoply_xcode_auth_args
+  FileUtils.mkdir_p(SHOPLY_ARTIFACTS_DIR)
+
+  shoply_with_release_environment(profile) do
+    build_app(
+      workspace: SHOPLY_WORKSPACE,
+      scheme: SHOPLY_SCHEME,
+      configuration: "Release",
+      clean: true,
+      output_directory: SHOPLY_ARTIFACTS_DIR,
+      output_name: output_name,
+      export_method: "app-store",
+      export_team_id: SHOPLY_DEVELOPER_TEAM_ID,
+      export_options: {
+        method: "app-store",
+        signingStyle: "automatic",
+        teamID: SHOPLY_DEVELOPER_TEAM_ID,
+        uploadSymbols: true,
+        manageAppVersionAndBuildNumber: false
+      },
+      xcargs: "DEVELOPMENT_TEAM=#{SHOPLY_DEVELOPER_TEAM_ID} #{auth_args}"
+    )
+  end
+end
+
+def shoply_export_archive!(profile, archive_path)
+  state = shoply_version_state
+  archive_path = File.expand_path(archive_path)
+  shoply_ui.user_error!("Xcode archive was not found: #{archive_path}") unless File.directory?(archive_path)
+
+  output_name = "Shoply-#{profile}-#{state[:version]}-#{state[:build_number]}.ipa"
+  auth_args = shoply_xcode_auth_args
+  FileUtils.mkdir_p(SHOPLY_ARTIFACTS_DIR)
+
+  build_app(
+    workspace: SHOPLY_WORKSPACE,
+    scheme: SHOPLY_SCHEME,
+    configuration: "Release",
+    skip_build_archive: true,
+    archive_path: archive_path,
+    output_directory: SHOPLY_ARTIFACTS_DIR,
+    output_name: output_name,
+    export_method: "app-store",
+    export_team_id: SHOPLY_DEVELOPER_TEAM_ID,
+    export_options: {
+      method: "app-store",
+      signingStyle: "automatic",
+      teamID: SHOPLY_DEVELOPER_TEAM_ID,
+      uploadSymbols: true,
+      manageAppVersionAndBuildNumber: false
+    },
+    xcargs: "DEVELOPMENT_TEAM=#{SHOPLY_DEVELOPER_TEAM_ID} #{auth_args}"
+  )
+end
+
+def shoply_upload_testflight_binary!(api_key:, state:, ipa:)
+  upload_to_testflight(
+    api_key: api_key,
+    app_identifier: SHOPLY_BUNDLE_ID,
+    apple_id: SHOPLY_APPLE_APP_ID,
+    ipa: ipa,
+    app_version: state[:version],
+    build_number: state[:build_number],
+    skip_submission: true,
+    skip_waiting_for_build_processing: true,
+    uses_non_exempt_encryption: false
+  )
+end
+
+def shoply_release_version_plan(api_key, options = {})
+  current = shoply_version_state
+  requested = ShoplyReleaseVersion.requested_state(
+    current_version: current[:version],
+    current_build_number: current[:build_number],
+    requested_version: shoply_release_override(options, :version, "APP_VERSION"),
+    requested_build_number: shoply_release_override(options, :build_number, "BUILD_NUMBER")
+  )
+  shoply_validate_version!(requested[:version], requested[:build_number])
+
+  latest_remote = latest_testflight_build_number(
+    api_key: api_key,
+    app_identifier: SHOPLY_BUNDLE_ID,
+    version: requested[:version],
+    initial_build_number: 0
+  ).to_i
+
+  selected_build = ShoplyReleaseVersion.resolve_build_number(
+    version: requested[:version],
+    candidate_build_number: requested[:build_number],
+    latest_remote_build_number: latest_remote,
+    explicit_build_number: requested[:explicit_build_number]
+  )
+
+  if requested[:version_changed] && !requested[:explicit_build_number]
+    shoply_ui.message("App version changed from #{current[:version]} to #{requested[:version]}; automatic build baseline is 1")
+  end
+  if requested[:explicit_build_number]
+    shoply_ui.message(
+      "Build number selection for #{requested[:version]}: explicit #{requested[:build_number]}, " \
+      "TestFlight latest #{latest_remote}"
+    )
+  else
+    shoply_ui.message(
+      "Build number selection for #{requested[:version]}: " \
+      "max(local candidate #{requested[:build_number]}, TestFlight next #{latest_remote + 1}) = #{selected_build}"
+    )
+  end
+
+  requested.merge(
+    build_number: selected_build.to_s,
+    current_version: current[:version],
+    current_build_number: current[:build_number],
+    latest_remote_build_number: latest_remote.to_s
+  )
+rescue ShoplyReleaseVersion::BuildNumberConflict => error
+  shoply_ui.user_error!(
+    "#{error.message}. Use BUILD_NUMBER=#{error.latest_remote_build_number + 1} or higher, " \
+    "or omit BUILD_NUMBER to select the next available build automatically."
+  )
+end
+
+def shoply_prepare_release_version!(api_key, options = {})
+  plan = shoply_release_version_plan(api_key, options)
+  shoply_sync_version_files!(version: plan[:version], build_number: plan[:build_number])
+end
+
+def shoply_require_confirmation!(variable)
+  return if ENV[variable].to_s == "YES"
+
+  shoply_ui.user_error!("This lane changes App Store Connect. Re-run with #{variable}=YES after reviewing the command.")
+end
+
+def shoply_env_true?(name, default: false)
+  value = ENV[name]
+  return default if value.nil? || value.strip.empty?
+
+  %w[1 true yes y].include?(value.strip.downcase)
+end
+
+def shoply_required_env!(names)
+  missing = names.select { |name| ENV[name].to_s.strip.empty? }
+  unless missing.empty?
+    shoply_ui.user_error!("Missing release environment values: #{missing.join(', ')}")
+  end
+
+  names.to_h { |name| [name, ENV.fetch(name).strip] }
+end
+
+def shoply_testflight_review_values!
+  names = %w[
+    TESTFLIGHT_BETA_CONTACT_FIRST_NAME
+    TESTFLIGHT_BETA_CONTACT_LAST_NAME
+    TESTFLIGHT_BETA_CONTACT_EMAIL
+    TESTFLIGHT_BETA_CONTACT_PHONE
+    TESTFLIGHT_BETA_DESCRIPTION
+    TESTFLIGHT_BETA_FEEDBACK_EMAIL
+    TESTFLIGHT_BETA_REVIEW_NOTES
+    TESTFLIGHT_WHATS_NEW
+  ]
+  names += %w[TESTFLIGHT_DEMO_ACCOUNT TESTFLIGHT_DEMO_PASSWORD] if shoply_env_true?("TESTFLIGHT_DEMO_REQUIRED", default: true)
+  shoply_required_env!(names)
+end
+
+def shoply_app_review_values!
+  names = %w[
+    APP_REVIEW_CONTACT_FIRST_NAME
+    APP_REVIEW_CONTACT_LAST_NAME
+    APP_REVIEW_CONTACT_EMAIL
+    APP_REVIEW_CONTACT_PHONE
+    APP_REVIEW_NOTES
+  ]
+  names += %w[APP_REVIEW_DEMO_USER APP_REVIEW_DEMO_PASSWORD] if shoply_env_true?("APP_REVIEW_DEMO_REQUIRED", default: true)
+  shoply_required_env!(names)
+end
+
+def shoply_beta_review_info(values)
+  info = {
+    contact_first_name: values.fetch("TESTFLIGHT_BETA_CONTACT_FIRST_NAME"),
+    contact_last_name: values.fetch("TESTFLIGHT_BETA_CONTACT_LAST_NAME"),
+    contact_email: values.fetch("TESTFLIGHT_BETA_CONTACT_EMAIL"),
+    contact_phone: values.fetch("TESTFLIGHT_BETA_CONTACT_PHONE")
+  }
+  if shoply_env_true?("TESTFLIGHT_DEMO_REQUIRED", default: true)
+    info[:demo_account_name] = values.fetch("TESTFLIGHT_DEMO_ACCOUNT")
+    info[:demo_account_password] = values.fetch("TESTFLIGHT_DEMO_PASSWORD")
+  end
+  info[:notes] = values.fetch("TESTFLIGHT_BETA_REVIEW_NOTES")
+  info
+end
+
+def shoply_app_review_info(values)
+  info = {
+    first_name: values.fetch("APP_REVIEW_CONTACT_FIRST_NAME"),
+    last_name: values.fetch("APP_REVIEW_CONTACT_LAST_NAME"),
+    email_address: values.fetch("APP_REVIEW_CONTACT_EMAIL"),
+    phone_number: values.fetch("APP_REVIEW_CONTACT_PHONE"),
+    notes: values.fetch("APP_REVIEW_NOTES")
+  }
+  if shoply_env_true?("APP_REVIEW_DEMO_REQUIRED", default: true)
+    info[:demo_user] = values.fetch("APP_REVIEW_DEMO_USER")
+    info[:demo_password] = values.fetch("APP_REVIEW_DEMO_PASSWORD")
+  end
+  info
+end
+
+def shoply_git_ignored?(relative_path)
+  _stdout, stderr, status = Open3.capture3("git", "-C", SHOPLY_ROOT_DIR, "check-ignore", "-q", relative_path)
+  return true if status.exitstatus == 0
+  return false if status.exitstatus == 1
+
+  shoply_ui.user_error!("git check-ignore failed for #{relative_path}: #{stderr}")
+end
+
+def shoply_doctor!
+  required_paths = [
+    SHOPLY_APP_CONFIG,
+    SHOPLY_EAS_CONFIG,
+    SHOPLY_PBXPROJ,
+    File.join(SHOPLY_WORKSPACE, "contents.xcworkspacedata"),
+    File.join(SHOPLY_IOS_DIR, "Podfile.lock"),
+    File.join(SHOPLY_IOS_DIR, ".xcode.env")
+  ]
+  missing_paths = required_paths.reject { |path| File.exist?(path) }
+  shoply_ui.user_error!("Missing iOS release files: #{missing_paths.join(', ')}") unless missing_paths.empty?
+
+  config = shoply_read_app_config.fetch("expo")
+  ios = config.fetch("ios")
+  expected_config = {
+    "bundleIdentifier" => SHOPLY_BUNDLE_ID,
+    "appleTeamId" => SHOPLY_DEVELOPER_TEAM_ID
+  }
+  mismatches = expected_config.filter_map do |key, expected|
+    "ios.#{key}=#{ios[key].inspect} (expected #{expected})" unless ios[key].to_s == expected
+  end
+  eas = JSON.parse(File.read(SHOPLY_EAS_CONFIG))
+  unless eas.dig("cli", "appVersionSource") == "local"
+    mismatches << "eas.cli.appVersionSource must be local"
+  end
+  SHOPLY_RELEASE_ENVIRONMENTS.each do |profile, expected_environment|
+    eas_environment = (eas.dig("build", "base", "env") || {}).merge(eas.dig("build", profile, "env") || {})
+    expected_environment.each do |key, expected|
+      unless eas_environment[key].to_s == expected
+        mismatches << "eas.build.#{profile}.env.#{key}=#{eas_environment[key].inspect} (expected #{expected})"
+      end
+    end
+  end
+  shoply_ui.user_error!("Release config mismatch: #{mismatches.join(', ')}") unless mismatches.empty?
+
+  state = shoply_version_state
+  shoply_validate_version!(state[:version], state[:build_number])
+
+  info_plist = File.read(SHOPLY_INFO_PLIST)
+  unless info_plist.include?("$(MARKETING_VERSION)") && info_plist.include?("$(CURRENT_PROJECT_VERSION)")
+    shoply_ui.user_error!("Info.plist must inherit MARKETING_VERSION and CURRENT_PROJECT_VERSION")
+  end
+
+  project_relative = "apps/mobile/ios/Shoply.xcodeproj/project.pbxproj"
+  workspace_relative = "apps/mobile/ios/Shoply.xcworkspace/contents.xcworkspacedata"
+  if shoply_git_ignored?(project_relative) || shoply_git_ignored?(workspace_relative)
+    shoply_ui.user_error!("The native Xcode project or workspace is still ignored by Git")
+  end
+  unless shoply_git_ignored?("apps/mobile/ios/.xcode.env.local")
+    shoply_ui.user_error!("apps/mobile/ios/.xcode.env.local must remain ignored")
+  end
+
+  stdout, stderr, status = Open3.capture3(
+    "xcodebuild",
+    "-project", SHOPLY_XCODEPROJ,
+    "-target", SHOPLY_SCHEME,
+    "-configuration", "Release",
+    "-showBuildSettings"
+  )
+  shoply_ui.user_error!("xcodebuild settings check failed: #{stderr}") unless status.success?
+
+  marketing_versions = stdout.scan(/^\s*MARKETING_VERSION = (.+)$/).flatten.map(&:strip).uniq
+  build_numbers = stdout.scan(/^\s*CURRENT_PROJECT_VERSION = (.+)$/).flatten.map(&:strip).uniq
+  signing_styles = stdout.scan(/^\s*CODE_SIGN_STYLE = (.+)$/).flatten.map(&:strip).uniq
+  development_teams = stdout.scan(/^\s*DEVELOPMENT_TEAM = (.+)$/).flatten.map(&:strip).uniq
+  bundle_identifiers = stdout.scan(/^\s*PRODUCT_BUNDLE_IDENTIFIER = (.+)$/).flatten.map(&:strip).uniq
+  unless marketing_versions == [state[:version]] && build_numbers == [state[:build_number]]
+    shoply_ui.user_error!(
+      "Xcode version mismatch: Expo #{state[:version]} (#{state[:build_number]}), " \
+      "Xcode #{marketing_versions.join('/')} (#{build_numbers.join('/')})"
+    )
+  end
+  unless signing_styles == ["Automatic"] && development_teams == [SHOPLY_DEVELOPER_TEAM_ID] && bundle_identifiers == [SHOPLY_BUNDLE_ID]
+    shoply_ui.user_error!(
+      "Xcode signing mismatch: style=#{signing_styles.join('/')}, " \
+      "team=#{development_teams.join('/')}, bundle=#{bundle_identifiers.join('/')}"
+    )
+  end
+
+  shoply_validate_api_key_file!
+  shoply_ui.success("iOS release doctor passed: #{state[:version]} (#{state[:build_number]}), automatic signing, key protected")
+end
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Validate local Xcode/Fastlane/version/signing prerequisites without contacting Apple"
+  lane :doctor do
+    shoply_doctor!
+  end
+
+  desc "Synchronize Expo app.json version/build number into Xcode"
+  lane :sync_versions do |options|
+    shoply_sync_requested_version!(options)
+  end
+
+  desc "Synchronize the next available TestFlight build locally; safe to run repeatedly (no upload)"
+  lane :next_build do |options|
+    api_key = shoply_app_store_api_key!
+    shoply_prepare_release_version!(api_key, options)
+  end
+
+  desc "Show local, remote, and planned TestFlight versions without changing files"
+  lane :testflight_status do |options|
+    current = shoply_version_state
+    api_key = shoply_app_store_api_key!
+    plan = shoply_release_version_plan(api_key, options)
+
+    shoply_ui.message(
+      "Version status: local Expo/Xcode #{current[:version]} (#{current[:build_number]}), " \
+      "latest TestFlight #{plan[:version]} (#{plan[:latest_remote_build_number]}), " \
+      "planned #{plan[:version]} (#{plan[:build_number]})"
+    )
+  end
+
+  desc "Validate missing TestFlight/App Review values without uploading or submitting"
+  lane :review_ready do |options|
+    target = (options[:target] || ENV["REVIEW_TARGET"] || "all").to_s
+    shoply_validate_api_key_file!
+    shoply_testflight_review_values! if %w[all testflight].include?(target)
+    shoply_app_review_values! if %w[all app_store].include?(target)
+    shoply_ui.user_error!("REVIEW_TARGET must be all, testflight, or app_store") unless %w[all testflight app_store].include?(target)
+    shoply_ui.success("#{target} review values are ready")
+  end
+
+  desc "Create a staging/TestFlight IPA locally; does not upload"
+  lane :archive_testflight do |options|
+    api_key = shoply_app_store_api_key!
+    shoply_prepare_release_version!(api_key, options)
+    shoply_build_ipa!("testflight")
+  end
+
+  desc "Build and upload to TestFlight without external distribution or Beta Review (guarded)"
+  lane :testflight_upload do |options|
+    shoply_require_confirmation!("CONFIRM_TESTFLIGHT_UPLOAD")
+    api_key = shoply_app_store_api_key!
+    state = shoply_prepare_release_version!(api_key, options)
+    ipa = shoply_build_ipa!("testflight")
+
+    shoply_upload_testflight_binary!(api_key: api_key, state: state, ipa: ipa)
+  end
+
+  desc "Export and upload an existing TestFlight archive without changing its build number (guarded)"
+  lane :testflight_upload_archive do |options|
+    shoply_require_confirmation!("CONFIRM_TESTFLIGHT_UPLOAD")
+    archive_path = (options[:archive_path] || ENV["ARCHIVE_PATH"]).to_s
+    shoply_ui.user_error!("Provide ARCHIVE_PATH for the existing .xcarchive") if archive_path.strip.empty?
+
+    state = shoply_version_state
+    api_key = shoply_app_store_api_key!
+    ipa = shoply_export_archive!("testflight", archive_path)
+    shoply_upload_testflight_binary!(api_key: api_key, state: state, ipa: ipa)
+  end
+
+  desc "Build and distribute to the external TestFlight group Shoply Beta (guarded)"
+  lane :testflight_qa do |options|
+    shoply_require_confirmation!("CONFIRM_TESTFLIGHT_UPLOAD")
+    review = shoply_testflight_review_values!
+    api_key = shoply_app_store_api_key!
+    state = shoply_prepare_release_version!(api_key, options)
+    ipa = shoply_build_ipa!("testflight")
+
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: SHOPLY_BUNDLE_ID,
+      apple_id: SHOPLY_APPLE_APP_ID,
+      ipa: ipa,
+      app_version: state[:version],
+      build_number: state[:build_number],
+      groups: [ENV.fetch("TESTFLIGHT_GROUP", SHOPLY_TESTFLIGHT_GROUP)],
+      distribute_external: true,
+      submit_beta_review: true,
+      notify_external_testers: shoply_env_true?("NOTIFY_EXTERNAL_TESTERS"),
+      skip_waiting_for_build_processing: false,
+      demo_account_required: shoply_env_true?("TESTFLIGHT_DEMO_REQUIRED", default: true),
+      beta_app_review_info: shoply_beta_review_info(review),
+      beta_app_description: review.fetch("TESTFLIGHT_BETA_DESCRIPTION"),
+      beta_app_feedback_email: review.fetch("TESTFLIGHT_BETA_FEEDBACK_EMAIL"),
+      changelog: review.fetch("TESTFLIGHT_WHATS_NEW"),
+      uses_non_exempt_encryption: false
+    )
+  end
+
+  desc "Create a production/App Store IPA locally; does not upload"
+  lane :archive_production do |options|
+    api_key = shoply_app_store_api_key!
+    shoply_prepare_release_version!(api_key, options)
+    shoply_build_ipa!("production")
+  end
+
+  desc "Build and upload an App Store release candidate; does not submit review (guarded)"
+  lane :app_store_upload do |options|
+    shoply_require_confirmation!("CONFIRM_APP_STORE_UPLOAD")
+    api_key = shoply_app_store_api_key!
+    state = shoply_prepare_release_version!(api_key, options)
+    ipa = shoply_build_ipa!("production")
+
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: SHOPLY_BUNDLE_ID,
+      ipa: ipa,
+      app_version: state[:version],
+      skip_metadata: true,
+      skip_screenshots: true,
+      submit_for_review: false,
+      run_precheck_before_submit: false,
+      force: true
+    )
+  end
+
+  desc "Submit an already uploaded build for App Review without automatic release (guarded)"
+  lane :submit_review do |options|
+    shoply_require_confirmation!("CONFIRM_APP_REVIEW_SUBMIT")
+    review = shoply_app_review_values!
+    api_key = shoply_app_store_api_key!
+    current = shoply_version_state
+    version = (options[:version] || ENV["APP_VERSION"] || current[:version]).to_s
+    build_number = (options[:build_number] || ENV["BUILD_NUMBER"] || current[:build_number]).to_s
+    shoply_validate_version!(version, build_number)
+
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: SHOPLY_BUNDLE_ID,
+      app_version: version,
+      build_number: build_number,
+      skip_binary_upload: true,
+      skip_metadata: false,
+      skip_screenshots: true,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      run_precheck_before_submit: true,
+      precheck_include_in_app_purchases: false,
+      app_review_information: shoply_app_review_info(review),
+      submission_information: {
+        export_compliance_uses_encryption: false
+      }
+    )
+  end
+end

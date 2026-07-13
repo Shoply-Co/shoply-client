@@ -1,0 +1,1 @@
+export { PayoutProfilePage } from "./ui";

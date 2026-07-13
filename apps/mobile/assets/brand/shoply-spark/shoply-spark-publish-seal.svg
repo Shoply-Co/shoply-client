@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <title>Shoply Spark Publish Seal</title>
+  <circle id="seal-surface" cx="32" cy="32" r="28" fill="#E7F8F1" stroke="#17B879" stroke-width="3"/>
+  <path id="seal-bag" d="M22 25H42L44.5 47H19.5L22 25Z" fill="#6266F1"/>
+  <path id="bag-handle" d="M25.5 26V21.5C25.5 17.9 28.4 15 32 15C35.6 15 38.5 17.9 38.5 21.5V26" stroke="#6266F1" stroke-width="3.25" stroke-linecap="round"/>
+  <path id="check" d="M26.5 35L30.2 38.7L38 30.5" stroke="white" stroke-width="3.25" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="completion-spark" d="M47 9C47.8 12.8 49.6 14.9 53.5 16.2C50.1 17.3 48.5 19.4 48 23C47.4 19.7 45.8 17.8 42.5 16.9C46.1 15.5 47.3 12.7 47 9Z" fill="#FF6F4E"/>
+</svg>

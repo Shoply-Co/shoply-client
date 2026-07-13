@@ -1,22 +1,55 @@
 {
-  "name": "client",
-  "version": "1.0.0",
-  "main": "index.ts",
-  "dependencies": {
-    "expo": "~57.0.2",
-    "expo-status-bar": "~57.0.0",
-    "react": "19.2.3",
-    "react-native": "0.86.0"
+  "name": "shoply-client-workspace",
+  "version": "0.2.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "start": "pnpm --filter @shoply/mobile start",
+    "start:clear": "pnpm --filter @shoply/mobile start:clear",
+    "dev-client": "pnpm --filter @shoply/mobile dev-client",
+    "android": "pnpm --filter @shoply/mobile android",
+    "ios": "pnpm --filter @shoply/mobile ios",
+    "web": "pnpm --filter @shoply/mobile web",
+    "generate:api": "pnpm --filter @shoply/mobile generate:api",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "doctor": "pnpm --filter @shoply/mobile doctor",
+    "build": "turbo run build",
+    "backend:dev": "docker compose --project-directory ../backend -f ../backend/docker-compose.yml --env-file ../backend/.env.develop up --build",
+    "backend:up": "docker compose --project-directory ../backend -f ../backend/docker-compose.yml --env-file ../backend/.env.develop up -d --build",
+    "backend:down": "docker compose --project-directory ../backend -f ../backend/docker-compose.yml down",
+    "eas:init": "pnpm --filter @shoply/mobile eas:init",
+    "eas:build:development": "pnpm --filter @shoply/mobile eas:build:development",
+    "eas:build:preview": "pnpm --filter @shoply/mobile eas:build:preview",
+    "eas:build:testflight": "pnpm --filter @shoply/mobile eas:build:testflight",
+    "eas:build:production": "pnpm --filter @shoply/mobile eas:build:production",
+    "eas:submit:testflight": "pnpm --filter @shoply/mobile eas:submit:testflight",
+    "eas:submit:production": "pnpm --filter @shoply/mobile eas:submit:production",
+    "eas:update:preview": "pnpm --filter @shoply/mobile eas:update:preview",
+    "eas:update:production": "pnpm --filter @shoply/mobile eas:update:production",
+    "ios:release:install": "bundle config set --local path vendor/bundle && bundle install && cd apps/mobile/ios && bundle exec pod install",
+    "ios:release:doctor": "bundle exec fastlane ios doctor",
+    "ios:release:test-versioning": "bundle exec ruby fastlane/tests/release_version_test.rb",
+    "ios:release:sync": "bundle exec fastlane ios sync_versions",
+    "ios:release:next-build": "bundle exec fastlane ios next_build",
+    "ios:release:testflight:status": "bundle exec fastlane ios testflight_status",
+    "ios:release:review-ready": "bundle exec fastlane ios review_ready",
+    "ios:release:archive:testflight": "bundle exec fastlane ios archive_testflight",
+    "ios:release:testflight:upload": "bundle exec fastlane ios testflight_upload",
+    "ios:release:testflight:upload-archive": "bundle exec fastlane ios testflight_upload_archive",
+    "ios:release:testflight": "bundle exec fastlane ios testflight_qa",
+    "ios:release:archive:production": "bundle exec fastlane ios archive_production",
+    "ios:release:upload": "bundle exec fastlane ios app_store_upload",
+    "ios:release:submit": "bundle exec fastlane ios submit_review"
   },
   "devDependencies": {
-    "@types/react": "~19.2.2",
-    "typescript": "~6.0.3"
-  },
-  "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
-  },
-  "private": true
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.6.0",
+    "prettier": "^3.9.4",
+    "turbo": "^2.10.3",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.62.1",
+    "vitest": "^4.1.9"
+  }
 }

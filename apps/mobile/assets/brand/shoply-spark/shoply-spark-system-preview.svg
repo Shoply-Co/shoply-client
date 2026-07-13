@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" fill="none">
+  <title>Shoply Spark System Preview</title>
+  <rect width="720" height="360" rx="32" fill="#F7F7FC"/>
+  <text x="42" y="58" fill="#17171C" font-family="Arial, sans-serif" font-size="24" font-weight="700">Shoply Spark</text>
+  <text x="42" y="84" fill="#696A76" font-family="Arial, sans-serif" font-size="14">Spot · Snap · Match · Publish</text>
+  <g transform="translate(54 120)">
+    <rect width="126" height="150" rx="24" fill="white"/>
+    <path d="M64 24C65.6 34.6 70.1 40.1 79 43.2L86 45.4L78 50.2C70.8 54.4 67.4 59.7 66 67.2L64 79L60 68C57.5 60.4 53.5 56.3 45 53.2L38 50.7L47.5 46.8C56.1 43.2 61 35.9 64 24Z" fill="#6266F1"/>
+    <path d="M56 43C56 37.9 59 34.75 63.5 34.75C68 34.75 71 37.9 71 43" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="64" cy="75" r="4" fill="#6266F1" stroke="white" stroke-width="2"/>
+    <circle cx="64" cy="75" r="1.75" fill="#FF6F4E"/>
+    <text x="63" y="116" text-anchor="middle" fill="#17171C" font-family="Arial, sans-serif" font-size="14" font-weight="700">Spot</text>
+    <text x="63" y="136" text-anchor="middle" fill="#838491" font-family="Arial, sans-serif" font-size="11">product anchor</text>
+  </g>
+  <g transform="translate(198 120)">
+    <rect width="150" height="150" rx="24" fill="white"/>
+    <path d="M26 33H124C129.5 33 134 37.5 134 43V51C130.7 51.7 128.25 54.55 128.25 58C128.25 61.45 130.7 64.3 134 65V69C134 74.5 129.5 79 124 79H26C20.5 79 16 74.5 16 69V43C16 37.5 20.5 33 26 33Z" fill="#6266F1"/>
+    <path d="M50 46L44 52M44 60L50 66M47 63L59 51" stroke="white" stroke-width="3" stroke-linecap="round"/>
+    <text x="75" y="116" text-anchor="middle" fill="#17171C" font-family="Arial, sans-serif" font-size="14" font-weight="700">Snap</text>
+    <text x="75" y="136" text-anchor="middle" fill="#838491" font-family="Arial, sans-serif" font-size="11">link ticket reveal</text>
+  </g>
+  <g transform="translate(366 120)">
+    <rect width="126" height="150" rx="24" fill="white"/>
+    <path d="M42 51H84L87 79H39L42 51Z" fill="#6266F1"/>
+    <path d="M48 52V47C48 38.7 54.7 32 63 32C71.3 32 78 38.7 78 47V52" stroke="#6266F1" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="34" cy="51" r="6" fill="#6266F1"/>
+    <circle cx="93" cy="69" r="5" fill="#AEB0F7"/>
+    <circle cx="91" cy="31" r="4" fill="#D9DAFC"/>
+    <text x="63" y="116" text-anchor="middle" fill="#17171C" font-family="Arial, sans-serif" font-size="14" font-weight="700">Match</text>
+    <text x="63" y="136" text-anchor="middle" fill="#838491" font-family="Arial, sans-serif" font-size="11">taste convergence</text>
+  </g>
+  <g transform="translate(510 120)">
+    <rect width="156" height="150" rx="24" fill="#17171C"/>
+    <circle cx="78" cy="54" r="30" fill="#DDF7EC" stroke="#17B879" stroke-width="3"/>
+    <path d="M67 48H89L92 73H64L67 48Z" fill="#6266F1"/>
+    <path d="M72 48V44C72 40.7 74.7 38 78 38C81.3 38 84 40.7 84 44V48" stroke="#6266F1" stroke-width="3" stroke-linecap="round"/>
+    <path d="M71.5 58L76 62.5L85 53" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M106 29C106.6 32 108 33.7 111 34.7C108.4 35.6 107.2 37.2 106.8 40C106.3 37.4 105.1 36 102.5 35.2C105.3 34.1 106.3 32 106 29Z" fill="#FF6F4E"/>
+    <text x="78" y="116" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="14" font-weight="700">Publish</text>
+    <text x="78" y="136" text-anchor="middle" fill="#A8A9B5" font-family="Arial, sans-serif" font-size="11">one-shot completion</text>
+  </g>
+  <g transform="translate(42 306)">
+    <circle cx="8" cy="8" r="8" fill="#6266F1"/><text x="24" y="13" fill="#696A76" font-family="Arial, sans-serif" font-size="12">discovery</text>
+    <circle cx="126" cy="8" r="8" fill="#FF6F4E"/><text x="142" y="13" fill="#696A76" font-family="Arial, sans-serif" font-size="12">reaction</text>
+    <circle cx="232" cy="8" r="8" fill="#17B879"/><text x="248" y="13" fill="#696A76" font-family="Arial, sans-serif" font-size="12">verified only</text>
+    <circle cx="342" cy="8" r="8" fill="#E6A400"/><text x="358" y="13" fill="#696A76" font-family="Arial, sans-serif" font-size="12">exploration only</text>
+    <text x="500" y="13" fill="#838491" font-family="Arial, sans-serif" font-size="12">no ambient loop</text>
+  </g>
+</svg>

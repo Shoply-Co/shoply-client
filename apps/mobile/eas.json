@@ -1,0 +1,79 @@
+{
+  "cli": {
+    "version": ">= 14.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "base": {
+      "env": {
+        "EXPO_PUBLIC_OAUTH_REDIRECT_URI": "shoply://auth/callback",
+        "EXPO_PUBLIC_KAKAO_LOGIN_ENABLED": "false"
+      }
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "environment": "development",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_RELEASE_PROFILE": "development",
+        "EXPO_PUBLIC_API_BASE_URL": "http://localhost:4000/v1",
+        "EXPO_PUBLIC_ANDROID_API_BASE_URL": "http://10.0.2.2:4000/v1"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "channel": "preview",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_RELEASE_PROFILE": "preview",
+        "EXPO_PUBLIC_API_BASE_URL": "https://staging-api.shopplyapp.com/v1"
+      }
+    },
+    "testflight": {
+      "extends": "base",
+      "distribution": "store",
+      "autoIncrement": true,
+      "channel": "staging",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_RELEASE_PROFILE": "testflight",
+        "EXPO_PUBLIC_API_BASE_URL": "https://staging-api.shopplyapp.com/v1"
+      }
+    },
+    "production": {
+      "extends": "base",
+      "distribution": "store",
+      "autoIncrement": true,
+      "channel": "production",
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_RELEASE_PROFILE": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.shopplyapp.com/v1"
+      }
+    }
+  },
+  "submit": {
+    "testflight": {
+      "ios": {
+        "bundleIdentifier": "com.shply.app",
+        "ascAppId": "6754759017"
+      }
+    },
+    "production": {
+      "ios": {
+        "bundleIdentifier": "com.shply.app",
+        "ascAppId": "6754759017"
+      },
+      "android": {
+        "applicationId": "com.shply.app"
+      }
+    }
+  }
+}

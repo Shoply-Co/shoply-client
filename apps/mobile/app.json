@@ -1,0 +1,105 @@
+{
+  "expo": {
+    "name": "Shoply",
+    "slug": "shoply",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "shoply",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "ios": {
+      "icon": "./assets/ios-icon.png",
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shply.app",
+      "appleTeamId": "XSGLM3JWK9",
+      "buildNumber": "15",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "usesAppleSignIn": true,
+      "entitlements": {
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.shply.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#5D52EE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "root": "./app"
+        }
+      ],
+      "expo-image",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Shoply에서 리뷰 사진과 영상을 촬영하기 위해 카메라 접근 권한을 사용합니다.",
+          "microphonePermission": "Shoply에서 리뷰 영상을 촬영하기 위해 마이크 접근 권한을 사용합니다.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Shoply에서 리뷰 사진과 영상을 선택하기 위해 사진 보관함 접근 권한을 사용합니다.",
+          "cameraPermission": "Shoply에서 리뷰 사진과 영상을 촬영하기 위해 카메라 접근 권한을 사용합니다.",
+          "microphonePermission": "Shoply에서 리뷰 영상을 촬영하기 위해 마이크 접근 권한을 사용합니다."
+        }
+      ],
+      "expo-video",
+      "expo-apple-authentication",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-dev-client",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/shoply-wordmark-splash.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#17181D",
+            "image": "./assets/shoply-wordmark-splash.png"
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "83466a33-b79d-4ded-aa8e-dda1c2c91e64"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/83466a33-b79d-4ded-aa8e-dda1c2c91e64"
+    }
+  }
+}

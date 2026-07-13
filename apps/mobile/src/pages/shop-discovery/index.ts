@@ -1,0 +1,1 @@
+export { ShopDiscoveryPage } from "./ui";

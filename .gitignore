@@ -2,12 +2,16 @@
 
 # dependencies
 node_modules/
+.pnpm-store/
+.turbo/
 
 # Expo
 .expo/
+apps/*/.expo/
 dist/
 web-build/
 expo-env.d.ts
+apps/*/expo-env.d.ts
 
 # Native
 .kotlin/
@@ -30,8 +34,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files; shared public defaults may live in .env or .env.development
 .env*.local
+fastlane/.env
+fastlane/.env.*
+!fastlane/.env.example
 
 # typescript
 *.tsbuildinfo
@@ -39,3 +46,11 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+apps/*/android
+
+# Ruby / Fastlane artifacts
+.bundle/
+vendor/bundle/
+/artifacts/ios/
+fastlane/report.xml
+fastlane/Preview.html

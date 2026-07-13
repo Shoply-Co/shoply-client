@@ -1,0 +1,183 @@
+name: iOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Release action to run
+        required: true
+        type: choice
+        default: doctor
+        options:
+          - doctor
+          - review-ready
+          - archive-testflight
+          - testflight-upload
+          - testflight-qa
+          - archive-production
+          - app-store-upload
+          - submit-review
+      app_version:
+        description: Optional target MAJOR.MINOR.PATCH; a new version defaults to build 1
+        required: false
+        type: string
+      build_number:
+        description: Optional exact build number; it must be greater than the latest remote build
+        required: false
+        type: string
+      release_notes:
+        description: TestFlight What to Test text (required for testflight-qa)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: ${{ inputs.action }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    environment: ios-release
+    env:
+      ASC_KEY_PATH: ${{ runner.temp }}/AuthKey_HP4FPUF9XJ.p8
+      ASC_KEY_ID: HP4FPUF9XJ
+      ASC_ISSUER_ID: e7b8e10d-4fe3-4265-9580-59b786c3cbaf
+      TESTFLIGHT_GROUP: qa
+      NOTIFY_EXTERNAL_TESTERS: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 26.4.0
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up Ruby and gems
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install CocoaPods dependencies
+        working-directory: apps/mobile/ios
+        run: bundle exec pod install
+
+      - name: Validate release version rules
+        run: pnpm ios:release:test-versioning
+
+      - name: Prepare App Store Connect API key
+        shell: bash
+        env:
+          ASC_KEY_CONTENT_BASE64: ${{ secrets.ASC_KEY_CONTENT_BASE64 }}
+        run: |
+          if [[ -z "$ASC_KEY_CONTENT_BASE64" ]]; then
+            echo "ASC_KEY_CONTENT_BASE64 GitHub Environment secret is required." >&2
+            exit 1
+          fi
+          printf '%s' "$ASC_KEY_CONTENT_BASE64" | base64 -D > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+
+      - name: Select optional version overrides
+        shell: bash
+        env:
+          INPUT_APP_VERSION: ${{ inputs.app_version }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          if [[ -n "$INPUT_APP_VERSION" ]]; then
+            if [[ ! "$INPUT_APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "app_version must use MAJOR.MINOR.PATCH format." >&2
+              exit 1
+            fi
+            printf 'APP_VERSION=%s\n' "$INPUT_APP_VERSION" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "$INPUT_BUILD_NUMBER" ]]; then
+            if [[ ! "$INPUT_BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+              echo "build_number must be a positive integer." >&2
+              exit 1
+            fi
+            printf 'BUILD_NUMBER=%s\n' "$INPUT_BUILD_NUMBER" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run selected release action
+        shell: bash
+        env:
+          TESTFLIGHT_BETA_CONTACT_FIRST_NAME: ${{ secrets.TESTFLIGHT_BETA_CONTACT_FIRST_NAME }}
+          TESTFLIGHT_BETA_CONTACT_LAST_NAME: ${{ secrets.TESTFLIGHT_BETA_CONTACT_LAST_NAME }}
+          TESTFLIGHT_BETA_CONTACT_EMAIL: ${{ secrets.TESTFLIGHT_BETA_CONTACT_EMAIL }}
+          TESTFLIGHT_BETA_CONTACT_PHONE: ${{ secrets.TESTFLIGHT_BETA_CONTACT_PHONE }}
+          TESTFLIGHT_BETA_DESCRIPTION: ${{ secrets.TESTFLIGHT_BETA_DESCRIPTION }}
+          TESTFLIGHT_BETA_FEEDBACK_EMAIL: ${{ secrets.TESTFLIGHT_BETA_FEEDBACK_EMAIL }}
+          TESTFLIGHT_BETA_REVIEW_NOTES: ${{ secrets.TESTFLIGHT_BETA_REVIEW_NOTES }}
+          TESTFLIGHT_WHATS_NEW: ${{ inputs.release_notes != '' && inputs.release_notes || secrets.TESTFLIGHT_WHATS_NEW }}
+          TESTFLIGHT_DEMO_REQUIRED: ${{ vars.TESTFLIGHT_DEMO_REQUIRED || 'true' }}
+          TESTFLIGHT_DEMO_ACCOUNT: ${{ secrets.TESTFLIGHT_DEMO_ACCOUNT }}
+          TESTFLIGHT_DEMO_PASSWORD: ${{ secrets.TESTFLIGHT_DEMO_PASSWORD }}
+          APP_REVIEW_CONTACT_FIRST_NAME: ${{ secrets.APP_REVIEW_CONTACT_FIRST_NAME }}
+          APP_REVIEW_CONTACT_LAST_NAME: ${{ secrets.APP_REVIEW_CONTACT_LAST_NAME }}
+          APP_REVIEW_CONTACT_EMAIL: ${{ secrets.APP_REVIEW_CONTACT_EMAIL }}
+          APP_REVIEW_CONTACT_PHONE: ${{ secrets.APP_REVIEW_CONTACT_PHONE }}
+          APP_REVIEW_NOTES: ${{ secrets.APP_REVIEW_NOTES }}
+          APP_REVIEW_DEMO_REQUIRED: ${{ vars.APP_REVIEW_DEMO_REQUIRED || 'true' }}
+          APP_REVIEW_DEMO_USER: ${{ secrets.APP_REVIEW_DEMO_USER }}
+          APP_REVIEW_DEMO_PASSWORD: ${{ secrets.APP_REVIEW_DEMO_PASSWORD }}
+        run: |
+          case "${{ inputs.action }}" in
+            doctor)
+              bundle exec fastlane ios doctor
+              ;;
+            review-ready)
+              bundle exec fastlane ios review_ready
+              ;;
+            archive-testflight)
+              bundle exec fastlane ios archive_testflight
+              ;;
+            testflight-upload)
+              CONFIRM_TESTFLIGHT_UPLOAD=YES bundle exec fastlane ios testflight_upload
+              ;;
+            testflight-qa)
+              CONFIRM_TESTFLIGHT_UPLOAD=YES bundle exec fastlane ios testflight_qa
+              ;;
+            archive-production)
+              bundle exec fastlane ios archive_production
+              ;;
+            app-store-upload)
+              CONFIRM_APP_STORE_UPLOAD=YES bundle exec fastlane ios app_store_upload
+              ;;
+            submit-review)
+              CONFIRM_APP_REVIEW_SUBMIT=YES bundle exec fastlane ios submit_review
+              ;;
+            *)
+              echo "Unsupported action: ${{ inputs.action }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Remove API key
+        if: always()
+        run: rm -f "$ASC_KEY_PATH"
+
+      - name: Upload local IPA artifact
+        if: ${{ always() && hashFiles('artifacts/ios/*.ipa') != '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: shoply-ios-${{ inputs.action }}-${{ github.run_number }}
+          path: artifacts/ios/*.ipa
+          if-no-files-found: ignore
+          retention-days: 7

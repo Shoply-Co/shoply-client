@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="64" viewBox="0 0 96 64" fill="none">
+  <title>Shoply Spark Link Ticket</title>
+  <path id="ticket" d="M16 9H78C83.5 9 88 13.5 88 19V27C84.7 27.7 82.25 30.55 82.25 34C82.25 37.45 84.7 40.3 88 41V45C88 50.5 83.5 55 78 55H16C10.5 55 6 50.5 6 45V19C6 13.5 10.5 9 16 9Z" fill="#6266F1"/>
+  <path id="spark-pin" d="M27 17C28.4 23.2 31.15 26.55 37.25 28.6C32.2 30.35 29.8 33.7 29 39.5L27 48L25 39.5C24.15 34.3 21.75 31.4 16.75 30C22.75 27.65 25.65 23.55 27 17Z" fill="white"/>
+  <circle id="anchor" cx="27" cy="46.5" r="2.25" fill="#FF6F4E"/>
+  <path id="link" d="M52.25 28.25L57.25 23.25C60.45 20.05 65.6 20.05 68.75 23.25C71.95 26.4 71.95 31.55 68.75 34.75L63.75 39.75M59.75 35.75L54.75 40.75C51.55 43.95 46.4 43.95 43.25 40.75C40.05 37.6 40.05 32.45 43.25 29.25L48.25 24.25M50.75 37.25L61.25 26.75" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
