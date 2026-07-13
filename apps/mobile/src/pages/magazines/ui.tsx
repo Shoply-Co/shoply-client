@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
 import { BookOpen, ChevronRight, Plus, Sparkles } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Dimensions, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Chip, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import {
@@ -12,6 +12,7 @@ import {
   useMagazineGenerationJob,
   useMyMagazines,
   useSubscribedMagazines,
+  isMagazineGeneratingStatus,
   type MagazineSummary
 } from "@/entities/magazine";
 import { captureActionEventsQuietly } from "@/features/event-capture";
@@ -187,6 +188,7 @@ export function MagazinesPage() {
 
 function HeroCover({ issue }: { issue: MagazineSummary }) {
   const theme = useShoplyTheme();
+  const generating = isMagazineGeneratingStatus(issue.status);
   return (
     <Pressable
       accessibilityRole="button"
@@ -194,22 +196,38 @@ function HeroCover({ issue }: { issue: MagazineSummary }) {
       onPress={() => openIssue(issue)}
       style={({ pressed }) => [styles.heroCard, { opacity: pressed ? 0.9 : 1, backgroundColor: theme.semantic.color.surfaceMuted }]}
     >
-      {issue.coverImageUrl ? (
+      {issue.coverImageUrl && !generating ? (
         <Image accessibilityLabel="잡지 표지" contentFit="cover" source={{ uri: issue.coverImageUrl }} style={StyleSheet.absoluteFill} transition={180} />
       ) : null}
       <View pointerEvents="none" style={styles.heroMonogram}>
-        <ShoplySMonogram size={170} color="rgba(255,255,255,0.24)" />
+        <ShoplySMonogram
+          size={170}
+          color={generating ? theme.semantic.color.primary : "rgba(255,255,255,0.24)"}
+          style={generating ? { opacity: 0.14 } : undefined}
+        />
       </View>
       <View style={styles.heroTop}>
-        <ShoplyText variant="caption" style={styles.inverseText}>{issue.issueLabel}</ShoplyText>
-        <ShoplyText variant="caption" style={styles.inverseText}>{issue.baseLayout.toUpperCase()}</ShoplyText>
-      </View>
-      <View style={[styles.heroCopy, { backgroundColor: theme.semantic.color.mediaScrimStrong }]}>
-        <ShoplyText style={styles.heroTitle} numberOfLines={2}>{issue.coverTitle ?? "SHOPLY EDIT"}</ShoplyText>
-        <ShoplyText variant="caption" style={styles.inverseText} numberOfLines={2}>
-          {issue.coverSubtitle ?? `${issue.itemCount}개의 취향을 편집한 이번 호`}
+        <ShoplyText variant="caption" style={generating ? { color: theme.semantic.color.text } : styles.inverseText}>{issue.issueLabel}</ShoplyText>
+        <ShoplyText variant="caption" style={generating ? { color: theme.semantic.color.primary } : styles.inverseText}>
+          {generating ? "EDITING" : issue.baseLayout.toUpperCase()}
         </ShoplyText>
       </View>
+      {generating ? (
+        <View accessibilityLiveRegion="polite" style={styles.generatingCopy}>
+          <ActivityIndicator color={theme.semantic.color.primary} size="large" />
+          <ShoplyText style={[styles.generatingTitle, { color: theme.semantic.color.text }]}>생성중입니다.</ShoplyText>
+          <ShoplyText variant="bodyMd" color="textMuted" align="center">
+            이번 {issue.cadence === "weekly" ? "주" : "달"}의 활동과 취향을 한 권으로 편집하고 있어요.
+          </ShoplyText>
+        </View>
+      ) : (
+        <View style={[styles.heroCopy, { backgroundColor: theme.semantic.color.mediaScrimStrong }]}>
+          <ShoplyText style={styles.heroTitle} numberOfLines={2}>{issue.coverTitle ?? "SHOPLY EDIT"}</ShoplyText>
+          <ShoplyText variant="caption" style={styles.inverseText} numberOfLines={2}>
+            {issue.coverSubtitle ?? `${issue.itemCount}개의 취향을 편집한 이번 호`}
+          </ShoplyText>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -337,6 +355,8 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 10 },
   heroCard: { height: 500, justifyContent: "space-between", marginRight: 14, overflow: "hidden", padding: 16, width: HERO_WIDTH },
   heroCopy: { gap: 7, padding: 16 },
+  generatingCopy: { alignItems: "center", flex: 1, gap: 12, justifyContent: "center", paddingHorizontal: 28 },
+  generatingTitle: { fontFamily: "Georgia", fontSize: 32, fontWeight: "700", lineHeight: 38 },
   heroList: { paddingHorizontal: 20 },
   heroMonogram: { left: -44, position: "absolute", top: 78 },
   heroTitle: { color: "#FFFFFF", fontFamily: "Georgia", fontSize: 34, fontWeight: "700", letterSpacing: -1.4, lineHeight: 37 },

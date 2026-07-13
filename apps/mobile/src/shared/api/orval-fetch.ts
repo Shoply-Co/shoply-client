@@ -1,5 +1,5 @@
-import { apiRequest } from "./client";
+import { apiRequestWithResponse } from "./client";
 
 export async function shoplyFetch<T>(url: string, options: RequestInit = {}): Promise<T> {
-  return apiRequest<T>(url, options);
+  return apiRequestWithResponse<unknown>(url, options) as Promise<T>;
 }

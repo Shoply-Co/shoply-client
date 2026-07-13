@@ -9,6 +9,7 @@ import { Platform, Pressable, StyleSheet, Text, useColorScheme, View } from "rea
 import { AppProviders } from "@/app/providers/app-providers";
 import { useSession } from "@/app/providers/session-provider";
 import { prefetchInitialSearchReviews } from "@/entities/review";
+import { useEnsureAutomaticMagazinesOnVisit } from "@/features/magazine-ensure";
 import { userFacingErrorMessage } from "@/shared/api/errors";
 import { queryClient } from "@/shared/api/query-client";
 import { darkTheme, lightTheme, useShoplyTheme } from "@shoply/design-system";
@@ -61,6 +62,11 @@ function RootStack() {
     theme.semantic.mode === "dark" ? DARK_SPLASH_BACKGROUND_COLOR : LIGHT_SPLASH_BACKGROUND_COLOR;
   const prefetchedSearchKeyRef = useRef<string | null>(null);
   const splashHiddenRef = useRef(false);
+
+  useEnsureAutomaticMagazinesOnVisit({
+    enabled: appReady && Boolean(user),
+    userId: user?.id
+  });
 
   const hideSplashScreen = useCallback(() => {
     if (!appReady || splashHiddenRef.current) return;

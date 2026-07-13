@@ -14,6 +14,7 @@ import {
 import {
   useMagazineIssue,
   useCustomMagazineSources,
+  isMagazineGeneratingStatus,
   type MagazineEditorialBlock,
   type MagazineIssue,
   type MagazineLayout
@@ -29,6 +30,7 @@ import {
 import { useMagazineSubscription } from "@/features/magazine-subscribe";
 import { userFacingErrorMessage } from "@/shared/api/errors";
 import { goBackOrReplace } from "@/shared/lib/navigation";
+import { ShoplySMonogram, ShoplyWordmark } from "@/shared/ui/brand";
 import { MagazineIssueViewer } from "@/widgets/magazine-issue-viewer";
 
 export function MagazineDetailPage() {
@@ -74,6 +76,20 @@ export function MagazineDetailPage() {
   }
 
   const issue = query.data;
+  if (isMagazineGeneratingStatus(issue.status)) {
+    return <MagazineGenerationState issue={issue} />;
+  }
+  if (issue.status === "failed") {
+    return (
+      <SafeAreaView style={[styles.state, { backgroundColor: theme.semantic.color.background }]}>
+        <ShoplyText variant="titleMd">매거진을 만들지 못했어요</ShoplyText>
+        <ShoplyText color="textMuted" align="center">
+          다음 앱 방문 때 다시 생성을 시도합니다. 잠시 후 앱을 다시 열어주세요.
+        </ShoplyText>
+        <Button label="잡지 목록으로" onPress={() => goBackOrReplace("/(tabs)/shoply")} />
+      </SafeAreaView>
+    );
+  }
   const editable = issue.isOwner && issue.issueType === "custom";
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.semantic.color.background }} edges={["top"]}>
@@ -250,6 +266,41 @@ export function MagazineDetailPage() {
           ) : null}
         </ScrollView>
       </KeyboardAwareBottomSheet>
+    </SafeAreaView>
+  );
+}
+
+function MagazineGenerationState({ issue }: { issue: MagazineIssue }) {
+  const theme = useShoplyTheme();
+  return (
+    <SafeAreaView
+      accessibilityLabel={`${issue.issueLabel} 매거진 생성 중`}
+      accessibilityLiveRegion="polite"
+      style={[styles.generationState, { backgroundColor: theme.semantic.color.background }]}
+    >
+      <View style={styles.generationHeader}>
+        <Button
+          accessibilityLabel="쇼플리 매거진 목록으로 돌아가기"
+          icon={<ArrowLeft size={20} color={theme.semantic.color.text} />}
+          onPress={() => goBackOrReplace("/(tabs)/shoply")}
+          size="icon"
+          variant="tertiary"
+        />
+        <ShoplyWordmark width={104} />
+      </View>
+      <View style={styles.generationBody}>
+        <View style={[styles.generationMonogram, { backgroundColor: theme.semantic.color.primarySoft }]}>
+          <ShoplySMonogram size={156} color={theme.semantic.color.primary} />
+        </View>
+        <ActivityIndicator color={theme.semantic.color.primary} size="large" />
+        <View style={styles.generationCopy}>
+          <ShoplyText variant="caption" color="primary" style={styles.eyebrow}>{issue.issueLabel}</ShoplyText>
+          <ShoplyText style={styles.generationTitle}>생성중입니다.</ShoplyText>
+          <ShoplyText variant="bodyLg" color="textMuted" align="center">
+            활동 기록과 취향을 고르고, 실제 잡지처럼 문장과 페이지를 편집하고 있어요.
+          </ShoplyText>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -447,6 +498,12 @@ const styles = StyleSheet.create({
   editorPanel: { gap: 13, marginTop: 34, padding: 20 },
   eyebrow: { letterSpacing: 1.4 },
   header: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, minHeight: 58, paddingHorizontal: 12 },
+  generationBody: { alignItems: "center", flex: 1, gap: 20, justifyContent: "center", padding: 28 },
+  generationCopy: { alignItems: "center", gap: 8, maxWidth: 330 },
+  generationHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", minHeight: 58, paddingHorizontal: 12 },
+  generationMonogram: { alignItems: "center", height: 220, justifyContent: "center", overflow: "hidden", width: 220 },
+  generationState: { flex: 1 },
+  generationTitle: { fontFamily: "Georgia", fontSize: 36, fontWeight: "700", lineHeight: 42 },
   inlineFields: { flexDirection: "row", gap: 10 },
   input: { borderRadius: 10, borderWidth: 1, fontSize: 16, minHeight: 48, paddingHorizontal: 12, paddingVertical: 10 },
   multiline: { minHeight: 110, textAlignVertical: "top" },

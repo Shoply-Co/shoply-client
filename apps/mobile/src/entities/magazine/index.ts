@@ -7,6 +7,7 @@ export {
   useMyMagazines,
   useSubscribedMagazines
 } from "./api/magazine-queries";
+export { isMagazineGeneratingStatus } from "./model/status";
 export type {
   MagazineDeal,
   MagazineCustomSource,

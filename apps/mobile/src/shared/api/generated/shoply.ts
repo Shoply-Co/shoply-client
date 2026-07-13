@@ -3201,6 +3201,7 @@ export type MagazineSummaryStatus = typeof MagazineSummaryStatus[keyof typeof Ma
 
 
 export const MagazineSummaryStatus = {
+  draft: 'draft',
   queued: 'queued',
   ranking: 'ranking',
   generating: 'generating',
@@ -3556,6 +3557,38 @@ export interface MagazineGenerationAccepted {
   status: string;
 }
 
+export type MagazineAutomaticEnsureIssueCadence = typeof MagazineAutomaticEnsureIssueCadence[keyof typeof MagazineAutomaticEnsureIssueCadence];
+
+
+export const MagazineAutomaticEnsureIssueCadence = {
+  weekly: 'weekly',
+  monthly: 'monthly',
+} as const;
+
+export type MagazineAutomaticEnsureIssueStatus = typeof MagazineAutomaticEnsureIssueStatus[keyof typeof MagazineAutomaticEnsureIssueStatus];
+
+
+export const MagazineAutomaticEnsureIssueStatus = {
+  draft: 'draft',
+  generating: 'generating',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+
+export interface MagazineAutomaticEnsureIssue {
+  issueId: string;
+  cadence: MagazineAutomaticEnsureIssueCadence;
+  periodStart: string;
+  periodEnd: string;
+  status: MagazineAutomaticEnsureIssueStatus;
+  /** @nullable */
+  jobId?: string | null;
+}
+
+export interface MagazineAutomaticEnsureResult {
+  issues: MagazineAutomaticEnsureIssue[];
+}
+
 export type MagazineCustomSourceRecommendationSource = typeof MagazineCustomSourceRecommendationSource[keyof typeof MagazineCustomSourceRecommendationSource];
 
 
@@ -3625,6 +3658,11 @@ export interface MagazineIssueEnvelope {
 
 export interface MagazineGenerationAcceptedEnvelope {
   data: MagazineGenerationAccepted;
+  meta?: Meta;
+}
+
+export interface MagazineAutomaticEnsureEnvelope {
+  data: MagazineAutomaticEnsureResult;
   meta?: Meta;
 }
 
@@ -8588,6 +8626,42 @@ export const getAdminAuditLogs = async (params?: GetAdminAuditLogsParams, option
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type ensureCurrentAutomaticMagazinesResponse200 = {
+  data: MagazineAutomaticEnsureEnvelope
+  status: 200
+}
+
+export type ensureCurrentAutomaticMagazinesResponseSuccess = (ensureCurrentAutomaticMagazinesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type ensureCurrentAutomaticMagazinesResponse = (ensureCurrentAutomaticMagazinesResponseSuccess)
+
+export const getEnsureCurrentAutomaticMagazinesUrl = () => {
+
+
+
+
+  return `/magazines/automatic/ensure`
+}
+
+/**
+ * @summary Ensure the current KST weekly and monthly automatic issues exist and generation has started
+ */
+export const ensureCurrentAutomaticMagazines = async ( options?: RequestInit): Promise<ensureCurrentAutomaticMagazinesResponse> => {
+
+  return shoplyFetch<ensureCurrentAutomaticMagazinesResponse>(getEnsureCurrentAutomaticMagazinesUrl(),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

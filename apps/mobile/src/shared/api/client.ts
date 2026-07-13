@@ -10,14 +10,43 @@ export interface ApiEnvelope<T> {
   };
 }
 
-interface RequestOptions extends RequestInit {
+export interface RequestOptions extends RequestInit {
   auth?: boolean;
   unwrapEnvelope?: boolean;
 }
 
+export interface ApiResponse<T> {
+  data: T;
+  status: number;
+  headers: Headers;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { auth = true, unwrapEnvelope = true, ...requestOptions } = options;
-  const headers = new Headers(options.headers);
+  const { body } = await executeApiRequest(path, auth, requestOptions);
+
+  if (!unwrapEnvelope) {
+    return body as T;
+  }
+
+  if (body && typeof body === "object" && "data" in body) {
+    return (body as ApiEnvelope<T>).data;
+  }
+
+  return body as T;
+}
+
+export async function apiRequestWithResponse<T>(
+  path: string,
+  options: RequestOptions = {}
+): Promise<ApiResponse<T>> {
+  const { auth = true, unwrapEnvelope: _unwrapEnvelope, ...requestOptions } = options;
+  const { body, response } = await executeApiRequest(path, auth, requestOptions);
+  return { data: body as T, status: response.status, headers: response.headers };
+}
+
+async function executeApiRequest(path: string, auth: boolean, requestOptions: RequestInit) {
+  const headers = new Headers(requestOptions.headers);
   const bodyIsFormData = isFormData(requestOptions.body);
   headers.set("Accept", "application/json");
 
@@ -49,15 +78,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw createApiErrorFromResponse(response.status, body);
   }
 
-  if (!unwrapEnvelope) {
-    return body as T;
-  }
-
-  if (body && typeof body === "object" && "data" in body) {
-    return (body as ApiEnvelope<T>).data;
-  }
-
-  return body as T;
+  return { body, response };
 }
 
 async function parseJsonBody(response: Response) {

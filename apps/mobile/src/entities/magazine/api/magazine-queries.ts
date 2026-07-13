@@ -6,6 +6,7 @@ import type {
   MagazineIssue,
   MagazineSummary
 } from "@/shared/api/generated/shoply";
+import { isMagazineGeneratingStatus } from "../model/status";
 
 export const magazineKeys = {
   all: ["magazines"] as const,
@@ -52,6 +53,8 @@ export function useMagazineIssue(issueId?: string) {
       return apiRequest<MagazineIssue>(`/magazines/${issueId}`);
     },
     enabled: Boolean(issueId),
+    refetchInterval: (query) =>
+      isMagazineGeneratingStatus(query.state.data?.status) ? 1500 : false,
     retry: 1
   });
 }
