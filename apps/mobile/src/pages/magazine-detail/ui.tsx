@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { ArrowLeft, BookmarkPlus, Check, Edit3, Send, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -34,8 +34,7 @@ import {
   useRegenerateMagazineBlock,
   useUpdateMagazine,
   useUpdateMagazineBlock,
-  useUpdateMagazineItems,
-  useUpsertMagazineDeal
+  useUpdateMagazineItems
 } from "@/features/magazine-edit";
 import { useMagazineSubscription } from "@/features/magazine-subscribe";
 import { userFacingErrorMessage } from "@/shared/api/errors";
@@ -47,23 +46,7 @@ export function MagazineDetailPage() {
   const { issueId } = useLocalSearchParams<{ issueId?: string }>();
   const theme = useShoplyTheme();
   const query = useMagazineIssue(issueId);
-  const updateMagazine = useUpdateMagazine();
-  const updateBlock = useUpdateMagazineBlock();
-  const regenerateBlock = useRegenerateMagazineBlock();
-  const fillSlot = useFillMagazineSlot();
-  const updateItems = useUpdateMagazineItems();
-  const publish = usePublishMagazine();
   const subscription = useMagazineSubscription();
-  const [editingBlock, setEditingBlock] = useState<MagazineEditorialBlock | null>(null);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [sourceSlotId, setSourceSlotId] = useState<string | null>(null);
-  const [draftText, setDraftText] = useState("");
-  const sourceQuery = useCustomMagazineSources(sourcesOpen);
-
-  useEffect(() => {
-    if (!editingBlock) return;
-    setDraftText(editingBlock.text);
-  }, [editingBlock]);
 
   if (query.isPending) {
     return (
@@ -101,7 +84,116 @@ export function MagazineDetailPage() {
       </SafeAreaView>
     );
   }
-  const editable = issue.isOwner && issue.issueType === "custom";
+
+  return (
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
+      edges={["top"]}
+    >
+      <MagazineIssueViewer
+        issue={issue}
+        header={
+          <MagazineHeader
+            issue={issue}
+            subscribing={subscription.isPending}
+            onEdit={
+              issue.isOwner && issue.issueType === "custom"
+                ? () =>
+                    router.push({
+                      pathname: "/magazine/[issueId]/edit",
+                      params: { issueId: issue.id }
+                    })
+                : undefined
+            }
+            onSubscribe={() =>
+              subscription.mutate({
+                seriesId: issue.owner.userId,
+                subscribed: issue.isSubscribed
+              })
+            }
+          />
+        }
+      />
+    </SafeAreaView>
+  );
+}
+
+export function MagazineEditPage() {
+  const { issueId } = useLocalSearchParams<{ issueId?: string }>();
+  const theme = useShoplyTheme();
+  const query = useMagazineIssue(issueId);
+  const updateMagazine = useUpdateMagazine();
+  const updateBlock = useUpdateMagazineBlock();
+  const regenerateBlock = useRegenerateMagazineBlock();
+  const fillSlot = useFillMagazineSlot();
+  const updateItems = useUpdateMagazineItems();
+  const publish = usePublishMagazine();
+  const [editingBlock, setEditingBlock] = useState<MagazineEditorialBlock | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [sourceSlotId, setSourceSlotId] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const sourceQuery = useCustomMagazineSources(sourcesOpen);
+
+  useEffect(() => {
+    if (!editingBlock) return;
+    setDraftText(editingBlock.text);
+  }, [editingBlock]);
+
+  if (query.isPending) {
+    return (
+      <SafeAreaView style={[styles.state, { backgroundColor: theme.semantic.color.background }]}>
+        <ActivityIndicator color={theme.semantic.color.primary} />
+        <ShoplyText color="textMuted">잡지의 페이지를 펼치고 있어요.</ShoplyText>
+      </SafeAreaView>
+    );
+  }
+
+  if (!query.data || query.isError) {
+    return (
+      <SafeAreaView style={[styles.state, { backgroundColor: theme.semantic.color.background }]}>
+        <ShoplyText variant="titleMd">잡지를 열지 못했어요</ShoplyText>
+        <ShoplyText color="textMuted" align="center">
+          {userFacingErrorMessage(query.error, "비공개이거나 삭제된 잡지일 수 있어요.")}
+        </ShoplyText>
+        <Button label="돌아가기" onPress={() => goBackOrReplace("/(tabs)/shoply")} />
+      </SafeAreaView>
+    );
+  }
+
+  const issue = query.data;
+  if (!issue.isOwner || issue.issueType !== "custom") {
+    return (
+      <SafeAreaView style={[styles.state, { backgroundColor: theme.semantic.color.background }]}>
+        <ShoplyText variant="titleMd">편집할 수 없는 잡지예요</ShoplyText>
+        <ShoplyText color="textMuted" align="center">
+          에디션은 소유자만 별도 편집실에서 수정할 수 있어요.
+        </ShoplyText>
+        <Button
+          label="잡지로 돌아가기"
+          onPress={() =>
+            goBackOrReplace({
+              pathname: "/magazine/[issueId]",
+              params: { issueId: issue.id }
+            })
+          }
+        />
+      </SafeAreaView>
+    );
+  }
+  if (isMagazineGeneratingStatus(issue.status)) {
+    return <MagazineGenerationState issue={issue} />;
+  }
+  if (issue.status === "failed") {
+    return (
+      <SafeAreaView style={[styles.state, { backgroundColor: theme.semantic.color.background }]}>
+        <ShoplyText variant="titleMd">매거진을 만들지 못했어요</ShoplyText>
+        <ShoplyText color="textMuted" align="center">
+          다음 앱 방문 때 다시 생성을 시도합니다. 잠시 후 앱을 다시 열어주세요.
+        </ShoplyText>
+        <Button label="잡지 목록으로" onPress={() => goBackOrReplace("/(tabs)/shoply")} />
+      </SafeAreaView>
+    );
+  }
   const sourceSlotNumber =
     issue.sections
       .flatMap((section) => section.items)
@@ -113,71 +205,46 @@ export function MagazineDetailPage() {
     >
       <MagazineIssueViewer
         issue={issue}
+        editing
         regeneratingBlockId={regenerateBlock.variables?.blockId ?? null}
-        onEditBlock={editable ? setEditingBlock : undefined}
-        onRegenerateBlock={
-          editable
-            ? (block) => regenerateBlock.mutate({ issueId: issue.id, blockId: block.id })
-            : undefined
+        onEditBlock={setEditingBlock}
+        onRegenerateBlock={(block) =>
+          regenerateBlock.mutate({ issueId: issue.id, blockId: block.id })
         }
-        onChangeCrop={
-          editable
-            ? (itemId, cropPayload) =>
-                updateItems.mutate({
-                  issueId: issue.id,
-                  items: issue.sections.flatMap((section) =>
-                    section.items.map((item) => ({
-                      itemId: item.id,
-                      sectionId: section.id,
-                      sortOrder: item.sortOrder,
-                      ...(item.id === itemId ? { cropPayload } : {})
-                    }))
-                  )
-                })
-            : undefined
+        onChangeCrop={(itemId, cropPayload) =>
+          updateItems.mutate({
+            issueId: issue.id,
+            items: issue.sections.flatMap((section) =>
+              section.items.map((item) => ({
+                itemId: item.id,
+                sectionId: section.id,
+                sortOrder: item.sortOrder,
+                ...(item.id === itemId ? { cropPayload } : {})
+              }))
+            )
+          })
         }
-        onSelectReview={
-          editable
-            ? (itemId) => {
-                setSourceSlotId(itemId);
-                setSourcesOpen(true);
-              }
-            : undefined
-        }
-        header={
-          editable ? (
-            <EditionStudioHeader issue={issue} />
-          ) : (
-            <MagazineHeader
-              issue={issue}
-              subscribing={subscription.isPending}
-              onSubscribe={() =>
-                subscription.mutate({
-                  seriesId: issue.owner.userId,
-                  subscribed: issue.isSubscribed
-                })
-              }
-            />
-          )
-        }
+        onSelectReview={(itemId) => {
+          setSourceSlotId(itemId);
+          setSourcesOpen(true);
+        }}
+        header={<EditionStudioHeader issue={issue} />}
         footer={
-          editable ? (
-            <MagazineEditorPanel
-              issue={issue}
-              busy={updateMagazine.isPending || updateItems.isPending || publish.isPending}
-              onUpdate={(patch) => updateMagazine.mutate({ issueId: issue.id, patch })}
-              onPublish={() => {
-                Alert.alert(
-                  "이 잡지를 발행할까요?",
-                  "발행하면 다른 사용자가 보고 구독할 수 있어요.",
-                  [
-                    { text: "취소", style: "cancel" },
-                    { text: "발행", onPress: () => publish.mutate(issue.id) }
-                  ]
-                );
-              }}
-            />
-          ) : null
+          <MagazineEditorPanel
+            issue={issue}
+            busy={updateMagazine.isPending || updateItems.isPending || publish.isPending}
+            onUpdate={(patch) => updateMagazine.mutate({ issueId: issue.id, patch })}
+            onPublish={() => {
+              Alert.alert(
+                "이 잡지를 발행할까요?",
+                "발행하면 다른 사용자가 보고 구독할 수 있어요.",
+                [
+                  { text: "취소", style: "cancel" },
+                  { text: "발행", onPress: () => publish.mutate(issue.id) }
+                ]
+              );
+            }}
+          />
         }
       />
 
@@ -380,9 +447,14 @@ function EditionStudioHeader({ issue }: { issue: MagazineIssue }) {
     >
       <View style={styles.studioHeaderTop}>
         <Button
-          accessibilityLabel="쇼플리 에디션 목록으로 돌아가기"
+          accessibilityLabel="잡지 상세로 돌아가기"
           icon={<ArrowLeft size={20} color={theme.semantic.color.text} />}
-          onPress={() => goBackOrReplace("/(tabs)/shoply")}
+          onPress={() =>
+            goBackOrReplace({
+              pathname: "/magazine/[issueId]",
+              params: { issueId: issue.id }
+            })
+          }
           size="icon"
           variant="tertiary"
         />
@@ -464,10 +536,12 @@ function MagazineGenerationState({ issue }: { issue: MagazineIssue }) {
 function MagazineHeader({
   issue,
   subscribing,
+  onEdit,
   onSubscribe
 }: {
   issue: MagazineIssue;
   subscribing: boolean;
+  onEdit?: () => void;
   onSubscribe: () => void;
 }) {
   const theme = useShoplyTheme();
@@ -496,6 +570,15 @@ function MagazineHeader({
           @{issue.owner.nickname}
         </ShoplyText>
       </View>
+      {onEdit ? (
+        <Button
+          accessibilityLabel="이 에디션 편집하기"
+          icon={<Edit3 size={16} color={theme.semantic.color.textInverse} />}
+          label="편집"
+          onPress={onEdit}
+          size="sm"
+        />
+      ) : null}
       {!issue.isOwner && issue.issueType === "custom" ? (
         <Button
           disabled={subscribing}
@@ -528,16 +611,12 @@ function MagazineEditorPanel({
   onPublish: () => void;
 }) {
   const theme = useShoplyTheme();
-  const deal = useUpsertMagazineDeal();
   const [title, setTitle] = useState(issue.revision.coverTitle ?? "");
   const [subtitle, setSubtitle] = useState(issue.revision.coverSubtitle ?? "");
   const [letter, setLetter] = useState(issue.revision.editorLetter ?? "");
   const [focusSectionId, setFocusSectionId] = useState(
     issue.sections.find((section) => section.layoutOverride)?.id ?? issue.sections[0]?.id ?? null
   );
-  const [discount, setDiscount] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
 
   return (
     <View
@@ -638,50 +717,6 @@ function MagazineEditorPanel({
         지면의 빈 칸을 눌러 내 리뷰를 배치하세요. 리뷰를 고른 슬롯에만 문장이 한 번 생성되며,
         이후에는 직접 수정할 수 있습니다.
       </ShoplyText>
-
-      <View style={[styles.rule, { backgroundColor: theme.semantic.color.border }]} />
-      <EditorLabel label="이번 호 특가 · 에디터 제공 정보" />
-      <View style={styles.inlineFields}>
-        <View style={{ flex: 0.4 }}>
-          <EditorInput
-            keyboardType="number-pad"
-            label="할인율 %"
-            maxLength={3}
-            value={discount}
-            onChangeText={setDiscount}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <EditorInput label="종료일 YYYY-MM-DD" value={endDate} onChangeText={setEndDate} />
-        </View>
-      </View>
-      <EditorInput
-        autoCapitalize="none"
-        keyboardType="url"
-        label="출처 URL"
-        value={sourceUrl}
-        onChangeText={setSourceUrl}
-      />
-      <Button
-        disabled={deal.isPending || !validDeal(discount, endDate, sourceUrl)}
-        label={deal.isPending ? "특가 저장 중" : "특가 정보 추가"}
-        variant="secondary"
-        onPress={async () => {
-          const end = new Date(`${endDate}T23:59:59+09:00`);
-          await deal.mutateAsync({
-            issueId: issue.id,
-            deal: {
-              discountPercent: Number(discount),
-              startsAt: new Date().toISOString(),
-              endsAt: end.toISOString(),
-              sourceUrl
-            }
-          });
-          setDiscount("");
-          setEndDate("");
-          setSourceUrl("");
-        }}
-      />
 
       <View style={[styles.rule, { backgroundColor: theme.semantic.color.border }]} />
       <ShoplyText variant="caption" color="textMuted">
@@ -813,18 +848,6 @@ function layoutName(layout: MagazineLayout) {
   return "Edit";
 }
 
-function validDeal(discount: string, endDate: string, sourceUrl: string) {
-  const amount = Number(discount);
-  const end = new Date(`${endDate}T23:59:59+09:00`);
-  return (
-    amount >= 1 &&
-    amount <= 100 &&
-    Number.isFinite(end.getTime()) &&
-    end > new Date() &&
-    /^https:\/\//i.test(sourceUrl)
-  );
-}
-
 const styles = StyleSheet.create({
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   draftStamp: {
@@ -870,7 +893,6 @@ const styles = StyleSheet.create({
   },
   generationState: { flex: 1 },
   generationTitle: { fontFamily: "Georgia", fontSize: 36, fontWeight: "700", lineHeight: 42 },
-  inlineFields: { flexDirection: "row", gap: 10 },
   input: {
     borderRadius: 10,
     borderWidth: 1,

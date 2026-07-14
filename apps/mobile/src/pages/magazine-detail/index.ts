@@ -1,1 +1,1 @@
-export { MagazineDetailPage } from "./ui";
+export { MagazineDetailPage, MagazineEditPage } from "./ui";

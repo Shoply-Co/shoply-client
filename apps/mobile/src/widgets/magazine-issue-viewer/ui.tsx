@@ -30,6 +30,7 @@ const WORDMARK_DISTANCE = SCREEN_WIDTH * 0.25;
 
 interface MagazineIssueViewerProps {
   issue: MagazineIssue;
+  editing?: boolean;
   onEditBlock?: (block: MagazineEditorialBlock) => void;
   onRegenerateBlock?: (block: MagazineEditorialBlock) => void;
   regeneratingBlockId?: string | null;
@@ -43,6 +44,7 @@ interface MagazineIssueViewerProps {
 
 export function MagazineIssueViewer({
   issue,
+  editing = false,
   onEditBlock,
   onRegenerateBlock,
   regeneratingBlockId,
@@ -105,12 +107,14 @@ export function MagazineIssueViewer({
         const layout = section.layoutOverride ?? issue.baseLayout;
         return (
           <View key={section.id}>
-            <WordmarkBoundary index={index} scrollY={scrollY} />
+            <WordmarkBoundary index={index} issueLabel={issue.issueLabel} scrollY={scrollY} />
             <MagazineSectionView
               section={section}
+              sectionIndex={index}
+              issueLabel={issue.issueLabel}
               layout={layout}
               dealsByItem={dealsByItem}
-              canEdit={issue.isOwner && issue.issueType === "custom"}
+              canEdit={editing && issue.isOwner && issue.issueType === "custom"}
               onEditBlock={onEditBlock}
               onRegenerateBlock={onRegenerateBlock}
               regeneratingBlockId={regeneratingBlockId}
@@ -223,7 +227,16 @@ function BlankCoverGrid({ color }: { color: string }) {
   );
 }
 
-function WordmarkBoundary({ index, scrollY }: { index: number; scrollY: SharedValue<number> }) {
+function WordmarkBoundary({
+  index,
+  issueLabel,
+  scrollY
+}: {
+  index: number;
+  issueLabel: string;
+  scrollY: SharedValue<number>;
+}) {
+  const theme = useShoplyTheme();
   const reduceMotion = useReducedMotion();
   const estimatedCenter = 720 + index * 980;
   const direction = index % 2 === 0 ? 1 : -1;
@@ -246,10 +259,27 @@ function WordmarkBoundary({ index, scrollY }: { index: number; scrollY: SharedVa
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={styles.wordmarkRail}
+      style={[
+        styles.wordmarkRail,
+        {
+          backgroundColor: theme.semantic.color.primarySoft,
+          borderColor: theme.semantic.color.primary
+        }
+      ]}
     >
-      <Animated.View style={animatedStyle}>
-        <ShoplyWordmark width={260} style={{ opacity: 0.15 }} />
+      <Animated.View style={[styles.wordmarkTrack, animatedStyle]}>
+        <ShoplyText style={[styles.wordmarkIndex, { color: theme.semantic.color.primary }]}>
+          {String(index + 1).padStart(2, "0")}
+        </ShoplyText>
+        <ShoplyWordmark width={228} style={{ opacity: 0.26 }} />
+        <ShoplyText
+          variant="caption"
+          style={[styles.wordmarkCopy, { color: theme.semantic.color.primary }]}
+          numberOfLines={1}
+        >
+          쇼핑을 쇼핑답게 · {issueLabel} · THE SHOPLY EDIT
+        </ShoplyText>
+        <ShoplyWordmark width={150} style={{ opacity: 0.13 }} />
       </Animated.View>
     </View>
   );
@@ -257,6 +287,8 @@ function WordmarkBoundary({ index, scrollY }: { index: number; scrollY: SharedVa
 
 function MagazineSectionView({
   section,
+  sectionIndex,
+  issueLabel,
   layout,
   dealsByItem,
   canEdit,
@@ -269,6 +301,8 @@ function MagazineSectionView({
   onRemoveItem
 }: {
   section: MagazineSection;
+  sectionIndex: number;
+  issueLabel: string;
   layout: MagazineLayout;
   dealsByItem: Map<string, MagazineDeal>;
   canEdit: boolean;
@@ -283,6 +317,21 @@ function MagazineSectionView({
   const theme = useShoplyTheme();
   return (
     <View accessibilityLabel={`${section.title} 섹션`} style={styles.section}>
+      {!canEdit ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={styles.sectionRunningType}
+        >
+          <ShoplyText
+            variant="caption"
+            style={[styles.sectionRunningTypeText, { color: theme.semantic.color.primary }]}
+          >
+            SHOPLY EDITORIAL · SECTION {String(sectionIndex + 1).padStart(2, "0")}
+          </ShoplyText>
+        </View>
+      ) : null}
       <View style={styles.sectionHeading}>
         <View style={[styles.issueNumber, { backgroundColor: theme.semantic.color.primary }]}>
           <ShoplyText variant="caption" style={{ color: theme.semantic.color.textInverse }}>
@@ -298,6 +347,17 @@ function MagazineSectionView({
           <ShoplyText style={[styles.sectionTitle, layout === "zine" ? styles.zineTitle : null]}>
             {section.title}
           </ShoplyText>
+          <View style={styles.sectionTitleRule}>
+            <View
+              style={[
+                styles.sectionTitleRuleLine,
+                { backgroundColor: theme.semantic.color.primary }
+              ]}
+            />
+            <ShoplyText variant="caption" color="primary" style={styles.uppercase}>
+              THE SHOPLY EDIT / {layout.toUpperCase()}
+            </ShoplyText>
+          </View>
           {section.intro ? (
             <ShoplyText variant="bodyMd" color="textMuted" style={styles.sectionIntro}>
               {section.intro}
@@ -333,6 +393,16 @@ function MagazineSectionView({
           />
         ))}
       </View>
+      {!canEdit ? (
+        <View style={[styles.sectionFolio, { borderColor: theme.semantic.color.borderStrong }]}>
+          <ShoplyText variant="caption" color="textMuted" style={styles.uppercase}>
+            SHOPLY · {issueLabel}
+          </ShoplyText>
+          <ShoplyText style={[styles.sectionFolioNumber, { color: theme.semantic.color.primary }]}>
+            {String(sectionIndex + 1).padStart(2, "0")}
+          </ShoplyText>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -380,16 +450,20 @@ function MagazineItemCard({
     sideBySide ? styles.sideCard : null,
     layout === "zine" && index % 2 === 1 ? styles.zineCardTiltRight : null
   ];
-  const aspectRatio =
-    facts?.mediaWidth && facts.mediaHeight
-      ? Math.min(1.35, Math.max(0.68, facts.mediaWidth / facts.mediaHeight))
-      : layout === "edit"
-        ? 0.82
-        : 0.78;
+  const photoFrameStyle = [
+    styles.photoFrame,
+    placement === "lead"
+      ? styles.leadPhoto
+      : placement === "compact"
+        ? styles.compactPhoto
+        : placement === "offset"
+          ? styles.offsetPhoto
+          : styles.sidePhoto
+  ];
   const disclosure = normalizeDisclosure(facts?.disclosureState);
   const cropX = numericCrop(item.cropPayload, "x", 0.5);
   const cropY = numericCrop(item.cropPayload, "y", 0.5);
-  const cropZoom = numericCrop(item.cropPayload, "zoom", 1);
+  const cropZoom = Math.min(2.5, Math.max(1, numericCrop(item.cropPayload, "zoom", 1)));
 
   if (!facts) {
     return (
@@ -402,11 +476,9 @@ function MagazineItemCard({
       >
         <View
           style={[
-            styles.photoFrame,
-            sideBySide ? styles.sidePhoto : null,
+            photoFrameStyle,
             styles.blankPhoto,
             {
-              aspectRatio: placement === "lead" ? 0.9 : layout === "edit" ? 0.82 : 0.78,
               backgroundColor: theme.semantic.color.primarySoft,
               borderColor: theme.semantic.color.primary
             }
@@ -452,10 +524,8 @@ function MagazineItemCard({
     <View style={cardStyle}>
       <View
         style={[
-          styles.photoFrame,
-          sideBySide ? styles.sidePhoto : null,
+          photoFrameStyle,
           {
-            aspectRatio: placement === "lead" ? Math.max(0.86, aspectRatio) : aspectRatio,
             backgroundColor: theme.semantic.color.surfaceMuted
           }
         ]}
@@ -795,6 +865,7 @@ const styles = StyleSheet.create({
   bodyCopy: { lineHeight: 23 },
   captionCopy: { fontFamily: "Georgia", lineHeight: 26 },
   compactCard: { width: "47%" },
+  compactPhoto: { aspectRatio: 0.76, minHeight: 200 },
   compactCopy: { fontSize: 14, lineHeight: 20 },
   copyActions: { flexDirection: "row", gap: 4, marginTop: 4 },
   copyBlock: { gap: 2 },
@@ -853,16 +924,37 @@ const styles = StyleSheet.create({
   itemEditActions: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 2 },
   leadCaptionCopy: { fontSize: 23, letterSpacing: -0.5, lineHeight: 30 },
   leadCard: { width: "100%" },
+  leadPhoto: { aspectRatio: 0.9, minHeight: 360 },
   leadMeta: { alignSelf: "flex-end", width: "84%" },
   offsetCard: { marginLeft: "34%", width: "66%" },
+  offsetPhoto: { aspectRatio: 0.88, minHeight: 250 },
   photoCredit: { minHeight: 34, justifyContent: "center" },
   photoFallback: { alignItems: "center", flex: 1, justifyContent: "center" },
-  photoFrame: { overflow: "hidden", width: "100%" },
+  photoFrame: { alignSelf: "stretch", flexShrink: 0, overflow: "hidden", width: "100%" },
   priceRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 },
   scrollContent: { paddingBottom: 120 },
-  section: { paddingHorizontal: 20, paddingVertical: 18 },
+  section: { overflow: "hidden", paddingHorizontal: 20, paddingVertical: 18, position: "relative" },
+  sectionFolio: {
+    alignItems: "center",
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 12
+  },
+  sectionFolioNumber: { fontFamily: "Georgia", fontSize: 24, fontWeight: "700", lineHeight: 28 },
   sectionHeading: { alignItems: "flex-start", flexDirection: "row", gap: 12, marginBottom: 34 },
   sectionIntro: { alignSelf: "flex-end", lineHeight: 22, marginTop: 10, width: "82%" },
+  sectionRunningType: {
+    pointerEvents: "none",
+    position: "absolute",
+    right: -92,
+    top: 300,
+    transform: [{ rotate: "90deg" }],
+    width: 220,
+    zIndex: 2
+  },
+  sectionRunningTypeText: { letterSpacing: 1.6, opacity: 0.46 },
   sectionTitle: {
     fontFamily: "Georgia",
     fontSize: 32,
@@ -870,10 +962,12 @@ const styles = StyleSheet.create({
     letterSpacing: -1.2,
     lineHeight: 38
   },
+  sectionTitleRule: { alignItems: "center", flexDirection: "row", gap: 8, marginTop: 10 },
+  sectionTitleRuleLine: { height: 2, width: 28 },
   serifBody: { fontFamily: "Georgia", lineHeight: 28 },
   sideCard: { alignItems: "flex-start", flexDirection: "row", gap: 14, width: "100%" },
   sideMeta: { flex: 1, paddingTop: 0 },
-  sidePhoto: { width: "46%" },
+  sidePhoto: { aspectRatio: 0.76, minHeight: 236, width: "52%" },
   sourcePill: {
     alignItems: "center",
     borderRadius: 999,
@@ -885,10 +979,21 @@ const styles = StyleSheet.create({
   uppercase: { letterSpacing: 1.2 },
   wordmarkRail: {
     alignItems: "center",
-    height: 78,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    height: 92,
     justifyContent: "center",
     overflow: "hidden",
     pointerEvents: "none"
+  },
+  wordmarkCopy: { letterSpacing: 1.5, minWidth: 272, textTransform: "uppercase" },
+  wordmarkIndex: { fontFamily: "Georgia", fontSize: 38, fontWeight: "700", lineHeight: 42 },
+  wordmarkTrack: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 22,
+    justifyContent: "center",
+    width: SCREEN_WIDTH + 420
   },
   zineCard: { transform: [{ rotate: "-1deg" }], width: "70%" },
   zineCardTiltRight: { transform: [{ rotate: "1.6deg" }] },
