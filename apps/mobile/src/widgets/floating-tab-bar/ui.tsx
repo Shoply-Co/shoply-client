@@ -100,8 +100,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: any) {
               accessibilityLabel={key === "shoply" ? "쇼플리 매거진 탭" : undefined}
               icon={key === "shoply" ? (
                 <ShoplySMonogram
-                  size={21}
+                  size={20}
                   color={focused ? theme.component.tabBar.active : theme.component.tabBar.inactive}
+                  variant="outlined"
                 />
               ) : Icon ? (
                 <Icon

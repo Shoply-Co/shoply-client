@@ -27,6 +27,7 @@ interface ShoplyBrandLockupProps {
 interface ShoplySMonogramProps {
   size?: number;
   color?: string;
+  variant?: "filled" | "outlined";
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }
@@ -47,6 +48,7 @@ export function ShoplyHomeWordmark() {
 export function ShoplySMonogram({
   size = 24,
   color,
+  variant = "filled",
   accessibilityLabel = "쇼플리 매거진",
   style
 }: ShoplySMonogramProps) {
@@ -63,15 +65,18 @@ export function ShoplySMonogram({
       >
         <Path
           d="M49 13.5C44.8 8.8 38.7 6 31.1 6C19.6 6 12 12.3 12 21.2C12 30.5 19.4 34.2 30.6 36.5C38.2 38.1 41.5 39.7 41.5 43.5C41.5 47.6 37.8 50 31.7 50C24.8 50 19.7 47.4 15.7 42.2L8 48.6C13.3 55.2 21.1 58.7 31.4 58.7C44.2 58.7 52.3 52.3 52.3 42.6C52.3 33.5 45.6 29.4 34.1 27C25.8 25.3 22.7 23.7 22.7 20.2C22.7 16.8 25.9 14.7 31.1 14.7C36.3 14.7 40.3 16.5 43.4 20.2L49 13.5Z"
-          fill={fill}
+          fill={variant === "filled" ? fill : "none"}
+          stroke={variant === "outlined" ? fill : "none"}
+          strokeLinejoin="round"
+          strokeWidth={variant === "outlined" ? 4.4 : 0}
         />
         <Path
           d="M16 8.5C23.7 4.1 35.9 2.5 46.7 8.3"
           fill="none"
           stroke={fill}
           strokeLinecap="round"
-          strokeWidth="2.6"
-          opacity="0.55"
+          strokeWidth={variant === "outlined" ? 3.4 : 2.6}
+          opacity={variant === "outlined" ? 0.72 : 0.55}
         />
       </Svg>
     </View>
