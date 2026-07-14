@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
-import { ArrowLeft, BookmarkPlus, Check, Edit3, Plus, Send, X } from "lucide-react-native";
+import { ArrowLeft, BookmarkPlus, Check, Edit3, Send, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,6 +20,7 @@ import {
   type MagazineLayout
 } from "@/entities/magazine";
 import {
+  useFillMagazineSlot,
   usePublishMagazine,
   useRegenerateMagazineBlock,
   useUpdateMagazine,
@@ -40,12 +41,13 @@ export function MagazineDetailPage() {
   const updateMagazine = useUpdateMagazine();
   const updateBlock = useUpdateMagazineBlock();
   const regenerateBlock = useRegenerateMagazineBlock();
+  const fillSlot = useFillMagazineSlot();
   const updateItems = useUpdateMagazineItems();
   const publish = usePublishMagazine();
   const subscription = useMagazineSubscription();
   const [editingBlock, setEditingBlock] = useState<MagazineEditorialBlock | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
-  const [sourceSectionId, setSourceSectionId] = useState<string | null>(null);
+  const [sourceSlotId, setSourceSlotId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
   const sourceQuery = useCustomMagazineSources(sourcesOpen);
 
@@ -107,43 +109,9 @@ export function MagazineDetailPage() {
             ...(item.id === itemId ? { cropPayload } : {})
           })))
         }) : undefined}
-        onMoveItem={editable ? (sectionId, itemId, direction) => {
-          const section = issue.sections.find((candidate) => candidate.id === sectionId);
-          if (!section) return;
-          const ordered = [...section.items].sort((left, right) => left.sortOrder - right.sortOrder);
-          const currentIndex = ordered.findIndex((item) => item.id === itemId);
-          const nextIndex = currentIndex + direction;
-          if (currentIndex < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
-          [ordered[currentIndex], ordered[nextIndex]] = [ordered[nextIndex]!, ordered[currentIndex]!];
-          const orderById = new Map(ordered.map((item, index) => [item.id, index]));
-          updateItems.mutate({
-            issueId: issue.id,
-            items: issue.sections.flatMap((candidate) => candidate.items.map((item) => ({
-              itemId: item.id,
-              sectionId: candidate.id,
-              sortOrder: candidate.id === sectionId ? orderById.get(item.id) ?? item.sortOrder : item.sortOrder
-            })))
-          });
-        } : undefined}
-        onRemoveItem={editable ? (itemId) => {
-          const total = issue.sections.reduce((sum, section) => sum + section.items.length, 0);
-          if (total <= 4) {
-            Alert.alert("최소 4개의 리뷰가 필요해요", "다른 리뷰를 추가한 뒤 이 아이템을 제거해주세요.");
-            return;
-          }
-          Alert.alert("이 아이템을 잡지에서 뺄까요?", "원본 리뷰와 보관·좋아요 상태는 바뀌지 않습니다.", [
-            { text: "취소", style: "cancel" },
-            {
-              text: "제거",
-              style: "destructive",
-              onPress: () => updateItems.mutate({
-                issueId: issue.id,
-                items: issue.sections.flatMap((section) => section.items
-                  .filter((item) => item.id !== itemId)
-                  .map((item, index) => ({ itemId: item.id, sectionId: section.id, sortOrder: index })))
-              })
-            }
-          ]);
+        onSelectReview={editable ? (itemId) => {
+          setSourceSlotId(itemId);
+          setSourcesOpen(true);
         } : undefined}
         header={
           <MagazineHeader
@@ -162,10 +130,6 @@ export function MagazineDetailPage() {
                 { text: "취소", style: "cancel" },
                 { text: "발행", onPress: () => publish.mutate(issue.id) }
               ]);
-            }}
-            onAddContent={() => {
-              setSourceSectionId(issue.sections[0]?.id ?? null);
-              setSourcesOpen(true);
             }}
           />
         ) : null}
@@ -214,24 +178,31 @@ export function MagazineDetailPage() {
 
       <KeyboardAwareBottomSheet
         visible={sourcesOpen}
-        onClose={() => setSourcesOpen(false)}
+        onClose={() => {
+          setSourcesOpen(false);
+          setSourceSlotId(null);
+        }}
         accessibilityLabel="콘텐츠 선택 닫기"
         contentStyle={[styles.sourceSheet, { backgroundColor: theme.semantic.color.surface }]}
       >
         <View style={styles.sheetHeader}>
           <View style={{ flex: 1 }}>
-            <ShoplyText variant="titleMd">리뷰 추가</ShoplyText>
-            <ShoplyText variant="caption" color="textMuted">내 게시물과 좋아요·보관한 리뷰만 표시됩니다.</ShoplyText>
+            <ShoplyText variant="titleMd">내 리뷰 선택</ShoplyText>
+            <ShoplyText variant="caption" color="textMuted">사진과 에디토리얼 문장이 한 세트로 이 슬롯에 배치됩니다.</ShoplyText>
           </View>
-          <Button size="icon" variant="tertiary" accessibilityLabel="콘텐츠 선택 닫기" icon={<X size={18} color={theme.semantic.color.text} />} onPress={() => setSourcesOpen(false)} />
+          <Button
+            size="icon"
+            variant="tertiary"
+            accessibilityLabel="콘텐츠 선택 닫기"
+            icon={<X size={18} color={theme.semantic.color.text} />}
+            onPress={() => {
+              setSourcesOpen(false);
+              setSourceSlotId(null);
+            }}
+          />
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {issue.sections.map((section) => (
-            <Chip key={section.id} label={section.title} selected={sourceSectionId === section.id} onPress={() => setSourceSectionId(section.id)} />
-          ))}
-        </ScrollView>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sourceList} keyboardShouldPersistTaps="handled">
-          {(sourceQuery.data ?? []).filter((source) => !issue.sections.some((section) => section.items.some((item) => item.reviewId === source.reviewId))).map((source) => (
+          {(sourceQuery.data ?? []).filter((source) => !issue.sections.some((section) => section.items.some((item) => item.reviewId === source.reviewId && item.id !== sourceSlotId))).map((source) => (
             <View key={source.reviewId} style={[styles.sourceCard, { borderColor: theme.semantic.color.border }]}>
               <View style={[styles.sourceThumb, { backgroundColor: theme.semantic.color.surfaceMuted }]}>
                 {source.mediaUrl ? <Image accessibilityLabel="추가할 리뷰 사진" contentFit="cover" source={{ uri: source.mediaUrl }} style={StyleSheet.absoluteFill} /> : null}
@@ -241,21 +212,23 @@ export function MagazineDetailPage() {
                 <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>{source.brandName ?? "브랜드 미지정"} · @{source.authorNickname}</ShoplyText>
               </View>
               <Button
-                accessibilityLabel={`${source.productName ?? source.title ?? "리뷰"} 추가`}
-                disabled={!sourceSectionId || updateItems.isPending || issue.sections.reduce((sum, section) => sum + section.items.length, 0) >= 20}
-                label="추가"
+                accessibilityLabel={`${source.productName ?? source.title ?? "리뷰"}를 선택한 슬롯에 배치`}
+                disabled={!sourceSlotId || fillSlot.isPending}
+                label={fillSlot.isPending && fillSlot.variables?.reviewId === source.reviewId ? "문장 작성 중" : "선택"}
                 size="sm"
                 onPress={async () => {
-                  if (!sourceSectionId) return;
-                  const targetCount = issue.sections.find((section) => section.id === sourceSectionId)?.items.length ?? 0;
-                  await updateItems.mutateAsync({
-                    issueId: issue.id,
-                    items: [
-                      ...issue.sections.flatMap((section) => section.items.map((item) => ({ itemId: item.id, sectionId: section.id, sortOrder: item.sortOrder }))),
-                      { reviewId: source.reviewId, sectionId: sourceSectionId, sortOrder: targetCount }
-                    ]
-                  });
-                  setSourcesOpen(false);
+                  if (!sourceSlotId) return;
+                  try {
+                    await fillSlot.mutateAsync({
+                      issueId: issue.id,
+                      slotId: sourceSlotId,
+                      reviewId: source.reviewId
+                    });
+                    setSourcesOpen(false);
+                    setSourceSlotId(null);
+                  } catch (error) {
+                    Alert.alert("리뷰를 배치하지 못했어요", userFacingErrorMessage(error, "잠시 후 다시 시도해주세요."));
+                  }
                 }}
               />
             </View>
@@ -346,14 +319,12 @@ function MagazineEditorPanel({
   issue,
   busy,
   onUpdate,
-  onPublish,
-  onAddContent
+  onPublish
 }: {
   issue: MagazineIssue;
   busy: boolean;
   onUpdate: (patch: Record<string, unknown>) => void;
   onPublish: () => void;
-  onAddContent: () => void;
 }) {
   const theme = useShoplyTheme();
   const deal = useUpsertMagazineDeal();
@@ -415,8 +386,9 @@ function MagazineEditorPanel({
 
       <View style={[styles.rule, { backgroundColor: theme.semantic.color.border }]} />
       <EditorLabel label="콘텐츠 구성" />
-      <Button icon={<Plus size={16} color={theme.semantic.color.primary} />} label="좋아요·보관·내 리뷰에서 추가" variant="secondary" onPress={onAddContent} />
-      <ShoplyText variant="caption" color="textMuted">각 페이지의 화살표로 순서를 바꾸고, 휴지통 버튼으로 제거할 수 있습니다.</ShoplyText>
+      <ShoplyText variant="bodyMd" color="textMuted">
+        지면의 빈 칸을 눌러 내 리뷰를 배치하세요. 리뷰를 고른 슬롯에만 문장이 한 번 생성되며, 이후에는 직접 수정할 수 있습니다.
+      </ShoplyText>
 
       <View style={[styles.rule, { backgroundColor: theme.semantic.color.border }]} />
       <EditorLabel label="이번 호 특가 · 에디터 제공 정보" />

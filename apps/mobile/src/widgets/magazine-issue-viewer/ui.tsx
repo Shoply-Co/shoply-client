@@ -1,6 +1,6 @@
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import { ArrowDown, ArrowUp, Edit3, RefreshCw, Scan, Trash2 } from "lucide-react-native";
+import { Edit3, Plus, RefreshCw, Scan } from "lucide-react-native";
 import { ReactNode, useMemo } from "react";
 import { Dimensions, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
@@ -34,6 +34,7 @@ interface MagazineIssueViewerProps {
   onRegenerateBlock?: (block: MagazineEditorialBlock) => void;
   regeneratingBlockId?: string | null;
   onChangeCrop?: (itemId: string, crop: { x: number; y: number; zoom: number }) => void;
+  onSelectReview?: (itemId: string) => void;
   onMoveItem?: (sectionId: string, itemId: string, direction: -1 | 1) => void;
   onRemoveItem?: (itemId: string) => void;
   header?: ReactNode;
@@ -46,6 +47,7 @@ export function MagazineIssueViewer({
   onRegenerateBlock,
   regeneratingBlockId,
   onChangeCrop,
+  onSelectReview,
   onMoveItem,
   onRemoveItem,
   header,
@@ -108,6 +110,7 @@ export function MagazineIssueViewer({
               onRegenerateBlock={onRegenerateBlock}
               regeneratingBlockId={regeneratingBlockId}
               onChangeCrop={onChangeCrop}
+              onSelectReview={onSelectReview}
               onMoveItem={onMoveItem}
               onRemoveItem={onRemoveItem}
             />
@@ -200,6 +203,7 @@ function MagazineSectionView({
   onRegenerateBlock,
   regeneratingBlockId,
   onChangeCrop,
+  onSelectReview,
   onMoveItem,
   onRemoveItem
 }: {
@@ -211,6 +215,7 @@ function MagazineSectionView({
   onRegenerateBlock?: (block: MagazineEditorialBlock) => void;
   regeneratingBlockId?: string | null;
   onChangeCrop?: (itemId: string, crop: { x: number; y: number; zoom: number }) => void;
+  onSelectReview?: (itemId: string) => void;
   onMoveItem?: (sectionId: string, itemId: string, direction: -1 | 1) => void;
   onRemoveItem?: (itemId: string) => void;
 }) {
@@ -252,6 +257,7 @@ function MagazineSectionView({
             onRegenerateBlock={onRegenerateBlock}
             regeneratingBlockId={regeneratingBlockId}
             onChangeCrop={onChangeCrop}
+            onSelectReview={onSelectReview}
             onMoveItem={onMoveItem}
             onRemoveItem={onRemoveItem}
             sectionId={section.id}
@@ -272,6 +278,7 @@ function MagazineItemCard({
   onRegenerateBlock,
   regeneratingBlockId,
   onChangeCrop,
+  onSelectReview,
   onMoveItem,
   onRemoveItem,
   sectionId
@@ -285,6 +292,7 @@ function MagazineItemCard({
   onRegenerateBlock?: (block: MagazineEditorialBlock) => void;
   regeneratingBlockId?: string | null;
   onChangeCrop?: (itemId: string, crop: { x: number; y: number; zoom: number }) => void;
+  onSelectReview?: (itemId: string) => void;
   onMoveItem?: (sectionId: string, itemId: string, direction: -1 | 1) => void;
   onRemoveItem?: (itemId: string) => void;
   sectionId: string;
@@ -292,7 +300,7 @@ function MagazineItemCard({
   const theme = useShoplyTheme();
   const facts = item.facts;
   const sourceLabel = recommendationSourceLabel(item.recommendationSource);
-  const placement = editorialPlacement(layout, index, canEdit);
+  const placement = editorialPlacement(layout, index);
   const sideBySide = placement === "side";
   const cardStyle = [
     styles.itemCard,
@@ -310,6 +318,36 @@ function MagazineItemCard({
   const cropX = numericCrop(item.cropPayload, "x", 0.5);
   const cropY = numericCrop(item.cropPayload, "y", 0.5);
   const cropZoom = numericCrop(item.cropPayload, "zoom", 1);
+
+  if (!facts) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`빈 에디션 슬롯 ${index + 1}, 내 리뷰 선택`}
+        disabled={!canEdit || !onSelectReview}
+        onPress={() => onSelectReview?.(item.id)}
+        style={({ pressed }) => [cardStyle, { opacity: pressed ? 0.78 : 1 }]}
+      >
+        <View style={[styles.photoFrame, sideBySide ? styles.sidePhoto : null, styles.blankPhoto, {
+          aspectRatio: placement === "lead" ? 0.9 : layout === "edit" ? 0.82 : 0.78,
+          backgroundColor: theme.semantic.color.primarySoft,
+          borderColor: theme.semantic.color.primary
+        }]}>
+          <View style={[styles.blankPlus, { backgroundColor: theme.semantic.color.primary }]}>
+            <Plus size={22} color={theme.semantic.color.textInverse} />
+          </View>
+          <ShoplyText variant="labelLg" color="primary">내 리뷰 선택</ShoplyText>
+          <ShoplyText variant="caption" color="textMuted">PHOTO</ShoplyText>
+        </View>
+        <View style={[styles.itemMeta, sideBySide ? styles.sideMeta : null, placement === "lead" ? styles.leadMeta : null]}>
+          <ShoplyText variant="caption" color="primary">EMPTY GRID / {String(index + 1).padStart(2, "0")}</ShoplyText>
+          <ShoplyText variant="bodyMd" color="textMuted">
+            리뷰를 선택하면 사진과 에디토리얼 문장이 이 칸에 함께 배치됩니다.
+          </ShoplyText>
+        </View>
+      </Pressable>
+    );
+  }
 
   return (
     <View style={cardStyle}>
@@ -360,6 +398,14 @@ function MagazineItemCard({
         {canEdit ? (
           <View style={styles.itemEditActions}>
             <Button
+              accessibilityLabel="이 슬롯의 리뷰 변경"
+              icon={<RefreshCw size={14} color={theme.semantic.color.primary} />}
+              label="리뷰 변경"
+              onPress={() => onSelectReview?.(item.id)}
+              size="sm"
+              variant="tertiary"
+            />
+            <Button
               accessibilityLabel="사진 강조 위치 변경"
               icon={<Scan size={14} color={theme.semantic.color.primary} />}
               label="초점"
@@ -371,9 +417,9 @@ function MagazineItemCard({
               size="sm"
               variant="tertiary"
             />
-            <Button accessibilityLabel="아이템을 앞으로 이동" icon={<ArrowUp size={14} color={theme.semantic.color.primary} />} onPress={() => onMoveItem?.(sectionId, item.id, -1)} size="icon" variant="tertiary" />
-            <Button accessibilityLabel="아이템을 뒤로 이동" icon={<ArrowDown size={14} color={theme.semantic.color.primary} />} onPress={() => onMoveItem?.(sectionId, item.id, 1)} size="icon" variant="tertiary" />
-            <Button accessibilityLabel="매거진에서 아이템 제거" icon={<Trash2 size={14} color={theme.semantic.color.danger} />} onPress={() => onRemoveItem?.(item.id)} size="icon" variant="tertiary" />
+            {onMoveItem ? <Button accessibilityLabel="아이템을 앞으로 이동" label="앞으로" onPress={() => onMoveItem(sectionId, item.id, -1)} size="sm" variant="tertiary" /> : null}
+            {onMoveItem ? <Button accessibilityLabel="아이템을 뒤로 이동" label="뒤로" onPress={() => onMoveItem(sectionId, item.id, 1)} size="sm" variant="tertiary" /> : null}
+            {onRemoveItem ? <Button accessibilityLabel="매거진에서 아이템 제거" label="제거" onPress={() => onRemoveItem(item.id)} size="sm" variant="tertiary" /> : null}
           </View>
         ) : null}
 
@@ -493,8 +539,7 @@ function EditorialCopy({
   );
 }
 
-function editorialPlacement(layout: MagazineLayout, index: number, canEdit: boolean) {
-  if (canEdit) return "lead" as const;
+function editorialPlacement(layout: MagazineLayout, index: number) {
   if (layout === "edit") {
     if (index % 5 === 0) return "side" as const;
     return "compact" as const;
@@ -541,6 +586,8 @@ function numericCrop(payload: Record<string, unknown> | undefined, key: string, 
 const styles = StyleSheet.create({
   atelierCard: { width: "62%" },
   atelierGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  blankPhoto: { alignItems: "center", borderStyle: "dashed", borderWidth: 1.5, gap: 7, justifyContent: "center", minHeight: 168 },
+  blankPlus: { alignItems: "center", borderRadius: 999, height: 44, justifyContent: "center", width: 44 },
   bodyCopy: { lineHeight: 23 },
   captionCopy: { fontFamily: "Georgia", lineHeight: 26 },
   compactCard: { width: "47%" },

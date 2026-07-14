@@ -8,6 +8,7 @@ import type {
   UpdateMagazineRequest,
   UpsertMagazineDealRequest
 } from "@/shared/api/generated/shoply";
+import { fillCustomMagazineSlot } from "@/shared/api/generated/shoply";
 
 function invalidateIssue(queryClient: ReturnType<typeof useQueryClient>, issueId: string) {
   return Promise.all([
@@ -48,6 +49,17 @@ export function useRegenerateMagazineBlock() {
       apiRequest<MagazineIssue>(`/magazines/${issueId}/blocks/${blockId}/regenerate`, {
         method: "POST"
       }),
+    onSuccess: (_result, variables) => invalidateIssue(queryClient, variables.issueId)
+  });
+}
+
+export function useFillMagazineSlot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ issueId, slotId, reviewId }: { issueId: string; slotId: string; reviewId: string }) => {
+      const response = await fillCustomMagazineSlot(issueId, slotId, { reviewId });
+      return response.data.data;
+    },
     onSuccess: (_result, variables) => invalidateIssue(queryClient, variables.issueId)
   });
 }

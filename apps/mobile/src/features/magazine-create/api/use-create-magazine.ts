@@ -1,24 +1,22 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { magazineKeys } from "@/entities/magazine";
 import { captureActionEventsQuietly } from "@/features/event-capture";
-import { apiRequest } from "@/shared/api/client";
-import type { MagazineGenerationAccepted } from "@/shared/api/generated/shoply";
+import { createCustomMagazine, type MagazineLayout } from "@/shared/api/generated/shoply";
 
 export function useCreateMagazine() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (cadence: "weekly" | "monthly" = "monthly") =>
-      apiRequest<MagazineGenerationAccepted>("/magazines/custom", {
-        method: "POST",
-        body: JSON.stringify({ cadence })
-      }),
-    onSuccess: (result) => {
+    mutationFn: async (layout: MagazineLayout) => {
+      const response = await createCustomMagazine({ layout });
+      return response.data.data;
+    },
+    onSuccess: (issue) => {
       captureActionEventsQuietly([{
         eventType: "magazine_created",
         targetType: "magazine_issue",
-        targetId: result.issueId,
+        targetId: issue.id,
         sourceSurface: "magazine_home",
-        payload: { status: result.status }
+        payload: { status: issue.status, layout: issue.baseLayout, creationMode: "blank_template" }
       }]);
       void queryClient.invalidateQueries({ queryKey: magazineKeys.mine() });
     }

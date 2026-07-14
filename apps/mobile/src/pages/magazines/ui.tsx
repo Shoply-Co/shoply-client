@@ -1,9 +1,11 @@
+import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router, type Href } from "expo-router";
+import { Plus, X } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Dimensions, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Chip, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
+import { Button, Chip, KeyboardAwareBottomSheet, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import {
   useDiscoverMagazines,
   useMyMagazines,
@@ -12,7 +14,10 @@ import {
   type MagazineSummary
 } from "@/entities/magazine";
 import { captureActionEventsQuietly } from "@/features/event-capture";
+import { useCreateMagazine } from "@/features/magazine-create";
 import { useMagazineSubscription } from "@/features/magazine-subscribe";
+import { userFacingErrorMessage } from "@/shared/api/errors";
+import type { MagazineLayout } from "@/shared/api/generated/shoply";
 import { ShoplySMonogram } from "@/shared/ui/brand";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -24,13 +29,16 @@ export function MagazinesPage() {
   const subscriptions = useSubscribedMagazines();
   const discover = useDiscoverMagazines();
   const subscription = useMagazineSubscription();
-  const [cadence, setCadence] = useState<"weekly" | "monthly">("monthly");
+  const createMagazine = useCreateMagazine();
+  const [cadence, setCadence] = useState<"weekly" | "monthly" | "edition">("monthly");
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
 
   const mineByCadence = useMemo(() => ({
-    monthly: (mine.data ?? []).filter((issue) => issue.cadence === "monthly"),
-    weekly: (mine.data ?? []).filter((issue) => issue.cadence === "weekly")
+    monthly: (mine.data ?? []).filter((issue) => issue.issueType === "automatic" && issue.cadence === "monthly"),
+    weekly: (mine.data ?? []).filter((issue) => issue.issueType === "automatic" && issue.cadence === "weekly"),
+    edition: (mine.data ?? []).filter((issue) => issue.issueType === "custom")
   }), [mine.data]);
-  const heroIssues = mineByCadence[cadence].slice(0, 4);
+  const heroIssues = cadence === "edition" ? mineByCadence.edition : mineByCadence[cadence].slice(0, 4);
 
   useEffect(() => {
     const visible = [
@@ -76,10 +84,13 @@ export function MagazinesPage() {
           <View style={styles.cadenceTabs}>
             <Chip label="월간" selected={cadence === "monthly"} onPress={() => setCadence("monthly")} />
             <Chip label="주간" selected={cadence === "weekly"} onPress={() => setCadence("weekly")} />
+            <Chip label="에디션" selected={cadence === "edition"} onPress={() => setCadence("edition")} />
           </View>
         </View>
 
-        {mine.isPending ? <HeroSkeleton /> : heroIssues.length ? (
+        {mine.isPending ? <HeroSkeleton /> : cadence === "edition" ? (
+          <EditionShelf issues={heroIssues} onCreate={() => setTemplatePickerOpen(true)} />
+        ) : heroIssues.length ? (
           <ScrollView
             accessibilityLabel={`${cadence === "monthly" ? "월간" : "주간"} 최신 잡지 슬라이드`}
             contentContainerStyle={styles.heroList}
@@ -127,7 +138,156 @@ export function MagazinesPage() {
           </Pressable>
         ) : null}
       </ScrollView>
+
+      <KeyboardAwareBottomSheet
+        visible={templatePickerOpen}
+        onClose={() => setTemplatePickerOpen(false)}
+        accessibilityLabel="에디션 템플릿 선택 닫기"
+        contentStyle={[styles.templateSheet, { backgroundColor: theme.semantic.color.surface }]}
+      >
+        <View style={styles.templateHeader}>
+          <View style={{ flex: 1, gap: 3 }}>
+            <ShoplyText variant="titleLg">에디션 템플릿</ShoplyText>
+            <ShoplyText variant="bodyMd" color="textMuted">
+              빈 지면만 만듭니다. 리뷰와 문장은 슬롯을 누를 때 직접 채울 수 있어요.
+            </ShoplyText>
+          </View>
+          <Button
+            accessibilityLabel="템플릿 선택 닫기"
+            icon={<X size={19} color={theme.semantic.color.text} />}
+            onPress={() => setTemplatePickerOpen(false)}
+            size="icon"
+            variant="tertiary"
+          />
+        </View>
+        <View style={styles.templateList}>
+          {(["atelier", "zine", "edit"] as MagazineLayout[]).map((layout) => (
+            <TemplateCard
+              key={layout}
+              layout={layout}
+              disabled={createMagazine.isPending}
+              onPress={async () => {
+                try {
+                  void Haptics.selectionAsync();
+                  const issue = await createMagazine.mutateAsync(layout);
+                  setTemplatePickerOpen(false);
+                  router.push(`/magazine/${issue.id}` as Href);
+                } catch (error) {
+                  Alert.alert("에디션을 만들지 못했어요", userFacingErrorMessage(error, "잠시 후 다시 시도해주세요."));
+                }
+              }}
+            />
+          ))}
+        </View>
+        {createMagazine.isPending ? (
+          <View accessibilityLiveRegion="polite" style={styles.creatingRow}>
+            <ActivityIndicator color={theme.semantic.color.primary} />
+            <ShoplyText variant="bodyMd" color="textMuted">빈 지면을 준비하고 있어요.</ShoplyText>
+          </View>
+        ) : null}
+      </KeyboardAwareBottomSheet>
     </SafeAreaView>
+  );
+}
+
+function EditionShelf({ issues, onCreate }: { issues: MagazineSummary[]; onCreate: () => void }) {
+  const theme = useShoplyTheme();
+  return (
+    <View accessibilityLabel="내 에디션 목록" style={styles.editionGrid}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="새 에디션 만들기"
+        onPress={onCreate}
+        style={({ pressed }) => [styles.createEditionTile, {
+          backgroundColor: theme.semantic.color.primarySoft,
+          borderColor: theme.semantic.color.primary,
+          opacity: pressed ? 0.8 : 1
+        }]}
+      >
+        <View style={[styles.createPlus, { backgroundColor: theme.semantic.color.primary }]}>
+          <Plus size={25} color={theme.semantic.color.textInverse} />
+        </View>
+        <View style={{ gap: 3 }}>
+          <ShoplyText variant="labelLg">새 에디션</ShoplyText>
+          <ShoplyText variant="caption" color="textMuted">빈 템플릿으로 시작</ShoplyText>
+        </View>
+      </Pressable>
+      {issues.map((issue) => <EditionTile key={issue.id} issue={issue} />)}
+    </View>
+  );
+}
+
+function EditionTile({ issue }: { issue: MagazineSummary }) {
+  const theme = useShoplyTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${issue.issueLabel}, ${issue.coverTitle ?? "나의 에디션"} 열기`}
+      onPress={() => openIssue(issue)}
+      style={({ pressed }) => [styles.editionTile, { backgroundColor: theme.semantic.color.surfaceMuted, opacity: pressed ? 0.86 : 1 }]}
+    >
+      {issue.coverImageUrl ? (
+        <Image accessibilityLabel="에디션 표지" contentFit="cover" source={{ uri: issue.coverImageUrl }} style={StyleSheet.absoluteFill} transition={160} />
+      ) : (
+        <View pointerEvents="none" style={styles.editionMonogram}>
+          <ShoplySMonogram size={94} color={theme.semantic.color.primary} style={{ opacity: 0.14 }} />
+        </View>
+      )}
+      <View style={[styles.editionTopLine, { borderColor: issue.coverImageUrl ? "rgba(255,255,255,0.74)" : theme.semantic.color.borderStrong }]}>
+        <ShoplyText variant="caption" style={issue.coverImageUrl ? styles.inverseText : undefined}>{issue.issueLabel}</ShoplyText>
+        <ShoplyText variant="caption" style={issue.coverImageUrl ? styles.inverseText : { color: theme.semantic.color.primary }}>
+          {issue.baseLayout.toUpperCase()}
+        </ShoplyText>
+      </View>
+      <View style={[styles.editionCopy, issue.coverImageUrl ? { backgroundColor: theme.semantic.color.mediaScrimStrong } : null]}>
+        <ShoplyText variant="titleMd" style={issue.coverImageUrl ? styles.inverseText : undefined} numberOfLines={2}>
+          {issue.coverTitle ?? "나의 에디션"}
+        </ShoplyText>
+        <ShoplyText variant="caption" style={issue.coverImageUrl ? styles.inverseText : { color: theme.semantic.color.textMuted }}>
+          {issue.itemCount ? `${issue.itemCount}개의 리뷰` : "빈 지면"}
+        </ShoplyText>
+      </View>
+    </Pressable>
+  );
+}
+
+function TemplateCard({ layout, disabled, onPress }: { layout: MagazineLayout; disabled: boolean; onPress: () => void }) {
+  const theme = useShoplyTheme();
+  const copy = layout === "atelier"
+    ? ["Atelier", "큰 사진과 비대칭 여백의 하이패션 지면"]
+    : layout === "zine"
+      ? ["Zine", "크기와 각도가 다른 스트리트 콜라주"]
+      : ["Edit", "제품과 문장을 또렷하게 읽는 룩북 그리드"];
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${copy[0]} 템플릿 선택`}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.templateCard, { borderColor: theme.semantic.color.border, opacity: disabled ? 0.5 : pressed ? 0.8 : 1 }]}
+    >
+      <TemplatePreview layout={layout} />
+      <View style={styles.templateCopy}>
+        <ShoplyText variant="titleMd">{copy[0]}</ShoplyText>
+        <ShoplyText variant="bodyMd" color="textMuted">{copy[1]}</ShoplyText>
+      </View>
+    </Pressable>
+  );
+}
+
+function TemplatePreview({ layout }: { layout: MagazineLayout }) {
+  const theme = useShoplyTheme();
+  const blocks = layout === "atelier"
+    ? [styles.previewLead, styles.previewSmall, styles.previewSmall]
+    : layout === "zine"
+      ? [styles.previewZineLead, styles.previewZineSmall, styles.previewZineWide]
+      : [styles.previewEdit, styles.previewEdit, styles.previewEdit, styles.previewEdit];
+  return (
+    <View style={[styles.templatePreview, { backgroundColor: theme.semantic.color.surfaceMuted }]}>
+      {blocks.map((style, index) => (
+        <View key={index} style={[styles.previewBlock, style, { backgroundColor: index === 0 ? theme.semantic.color.primary : theme.semantic.color.borderStrong }]} />
+      ))}
+    </View>
   );
 }
 
@@ -272,6 +432,14 @@ const styles = StyleSheet.create({
   brandCopy: { gap: 1 },
   cadenceTabs: { flexDirection: "row", gap: 6 },
   content: { gap: 16, paddingBottom: 120 },
+  createEditionTile: { alignItems: "center", borderStyle: "dashed", borderWidth: 1.5, gap: 13, height: 238, justifyContent: "center", padding: 16, width: "48%" },
+  createPlus: { alignItems: "center", borderRadius: 999, height: 48, justifyContent: "center", width: 48 },
+  creatingRow: { alignItems: "center", flexDirection: "row", gap: 10, justifyContent: "center", minHeight: 44 },
+  editionCopy: { gap: 3, padding: 11 },
+  editionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, paddingHorizontal: 20 },
+  editionMonogram: { left: -22, position: "absolute", top: 48 },
+  editionTile: { height: 238, justifyContent: "space-between", overflow: "hidden", padding: 10, width: "48%" },
+  editionTopLine: { borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingBottom: 6 },
   empty: { gap: 5, marginHorizontal: 20, minHeight: 96, paddingVertical: 24 },
   eyebrow: { letterSpacing: 1.5 },
   header: { paddingHorizontal: 20, paddingTop: 10 },
@@ -290,10 +458,23 @@ const styles = StyleSheet.create({
   personPhoto: { alignItems: "center", borderRadius: 18, height: 132, justifyContent: "center", overflow: "hidden", width: 132 },
   personTile: { width: 132 },
   pageTitle: { fontFamily: "Georgia", fontSize: 32, fontWeight: "700", lineHeight: 36 },
+  previewBlock: { borderRadius: 1 },
+  previewEdit: { height: 34, width: 29 },
+  previewLead: { height: 46, width: 62 },
+  previewSmall: { height: 25, width: 29 },
+  previewZineLead: { height: 43, transform: [{ rotate: "-3deg" }], width: 36 },
+  previewZineSmall: { height: 29, marginTop: 7, transform: [{ rotate: "4deg" }], width: 22 },
+  previewZineWide: { height: 25, marginLeft: 10, transform: [{ rotate: "-2deg" }], width: 48 },
   retryButton: { alignSelf: "flex-start", marginHorizontal: 20, paddingVertical: 8 },
   rowSkeleton: { flexDirection: "row", gap: 14, overflow: "hidden", paddingHorizontal: 20 },
   sectionDisplay: { fontFamily: "Georgia", fontSize: 30, fontWeight: "700", lineHeight: 36 },
   sectionTop: { alignItems: "flex-end", flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 32 },
   slogan: { letterSpacing: -0.1 },
-  subscribeAction: { minHeight: 36, justifyContent: "center", paddingVertical: 6 }
+  subscribeAction: { minHeight: 36, justifyContent: "center", paddingVertical: 6 },
+  templateCard: { alignItems: "center", borderWidth: 1, flexDirection: "row", gap: 14, minHeight: 112, padding: 12 },
+  templateCopy: { flex: 1, gap: 4 },
+  templateHeader: { alignItems: "flex-start", flexDirection: "row", gap: 12 },
+  templateList: { gap: 10 },
+  templatePreview: { flexDirection: "row", flexWrap: "wrap", gap: 4, height: 86, overflow: "hidden", padding: 5, width: 72 },
+  templateSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 16, maxHeight: "86%", padding: 20, paddingBottom: Platform.OS === "ios" ? 36 : 22 }
 });

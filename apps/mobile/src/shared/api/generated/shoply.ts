@@ -3463,16 +3463,8 @@ export interface MagazineIssue {
   deals: MagazineDeal[];
 }
 
-export type CreateCustomMagazineRequestCadence = typeof CreateCustomMagazineRequestCadence[keyof typeof CreateCustomMagazineRequestCadence];
-
-
-export const CreateCustomMagazineRequestCadence = {
-  weekly: 'weekly',
-  monthly: 'monthly',
-} as const;
-
 export interface CreateCustomMagazineRequest {
-  cadence?: CreateCustomMagazineRequestCadence;
+  layout: MagazineLayout;
 }
 
 export type UpdateMagazineRequestSectionLayoutOverride = {
@@ -4318,6 +4310,10 @@ export type UpdateMagazineEditorialBlockBody = {
      * @maxLength 500
      */
   text: string;
+};
+
+export type FillCustomMagazineSlotBody = {
+  reviewId: string;
 };
 
 export type getAuthOauthBrowserProviderStartResponse302 = {
@@ -8829,12 +8825,12 @@ export const discoverMagazines = async (params?: DiscoverMagazinesParams, option
 
 
 
-export type createCustomMagazineResponse202 = {
-  data: MagazineGenerationAcceptedEnvelope
-  status: 202
+export type createCustomMagazineResponse201 = {
+  data: MagazineIssueEnvelope
+  status: 201
 }
 
-export type createCustomMagazineResponseSuccess = (createCustomMagazineResponse202) & {
+export type createCustomMagazineResponseSuccess = (createCustomMagazineResponse201) & {
   headers: Headers;
 };
 ;
@@ -8850,9 +8846,9 @@ export const getCreateCustomMagazineUrl = () => {
 }
 
 /**
- * @summary Start a fully composed custom magazine draft
+ * @summary Create a blank custom edition from a fixed grid template without AI generation
  */
-export const createCustomMagazine = async (createCustomMagazineRequest?: CreateCustomMagazineRequest, options?: RequestInit): Promise<createCustomMagazineResponse> => {
+export const createCustomMagazine = async (createCustomMagazineRequest: CreateCustomMagazineRequest, options?: RequestInit): Promise<createCustomMagazineResponse> => {
 
   return shoplyFetch<createCustomMagazineResponse>(getCreateCustomMagazineUrl(),
   {
@@ -8886,7 +8882,7 @@ export const getListCustomMagazineSourcesUrl = () => {
 }
 
 /**
- * @summary List the current user's eligible own, liked, and saved reviews for custom editing
+ * @summary List the current user's published reviews eligible for custom edition slots
  */
 export const listCustomMagazineSources = async ( options?: RequestInit): Promise<listCustomMagazineSourcesResponse> => {
 
@@ -9058,6 +9054,45 @@ export const regenerateMagazineEditorialBlock = async (issueId: string,
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type fillCustomMagazineSlotResponse200 = {
+  data: MagazineIssueEnvelope
+  status: 200
+}
+
+export type fillCustomMagazineSlotResponseSuccess = (fillCustomMagazineSlotResponse200) & {
+  headers: Headers;
+};
+;
+
+export type fillCustomMagazineSlotResponse = (fillCustomMagazineSlotResponseSuccess)
+
+export const getFillCustomMagazineSlotUrl = (issueId: string,
+    slotId: string,) => {
+
+
+
+
+  return `/magazines/${issueId}/slots/${slotId}/review`
+}
+
+/**
+ * @summary Place one of the current user's reviews in a blank custom edition slot and generate copy for that slot only
+ */
+export const fillCustomMagazineSlot = async (issueId: string,
+    slotId: string,
+    fillCustomMagazineSlotBody: FillCustomMagazineSlotBody, options?: RequestInit): Promise<fillCustomMagazineSlotResponse> => {
+
+  return shoplyFetch<fillCustomMagazineSlotResponse>(getFillCustomMagazineSlotUrl(issueId,slotId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(fillCustomMagazineSlotBody)
   }
 );}
 
