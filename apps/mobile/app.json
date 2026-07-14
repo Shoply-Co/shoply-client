@@ -2,20 +2,18 @@
   "expo": {
     "name": "Shoply",
     "slug": "shoply",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "shoply",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "0.3.0",
     "ios": {
       "icon": "./assets/ios-icon.png",
       "supportsTablet": true,
       "bundleIdentifier": "com.shply.app",
       "appleTeamId": "XSGLM3JWK9",
-      "buildNumber": "15",
+      "buildNumber": "1",
       "config": {
         "usesNonExemptEncryption": false
       },

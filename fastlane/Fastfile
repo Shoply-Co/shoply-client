@@ -13,6 +13,7 @@ SHOPLY_XCODEPROJ = File.join(SHOPLY_IOS_DIR, "Shoply.xcodeproj")
 SHOPLY_PBXPROJ = File.join(SHOPLY_XCODEPROJ, "project.pbxproj")
 SHOPLY_WORKSPACE = File.join(SHOPLY_IOS_DIR, "Shoply.xcworkspace")
 SHOPLY_INFO_PLIST = File.join(SHOPLY_IOS_DIR, "Shoply/Info.plist")
+SHOPLY_EXPO_PLIST = File.join(SHOPLY_IOS_DIR, "Shoply/Supporting/Expo.plist")
 SHOPLY_ARTIFACTS_DIR = File.join(SHOPLY_ROOT_DIR, "artifacts/ios")
 
 SHOPLY_SCHEME = "Shoply"
@@ -77,6 +78,9 @@ def shoply_sync_version_files!(version:, build_number:)
   config = shoply_read_app_config
   config.fetch("expo")["version"] = version
   config.fetch("expo").fetch("ios")["buildNumber"] = build_number
+  if config.fetch("expo")["runtimeVersion"].is_a?(String)
+    config.fetch("expo")["runtimeVersion"] = version
+  end
   app_json = "#{JSON.pretty_generate(config)}\n"
   File.write(SHOPLY_APP_CONFIG, app_json) if File.read(SHOPLY_APP_CONFIG) != app_json
 
@@ -91,8 +95,40 @@ def shoply_sync_version_files!(version:, build_number:)
   project = project.gsub(/CURRENT_PROJECT_VERSION = [^;]+;/, "CURRENT_PROJECT_VERSION = #{build_number};")
   File.write(SHOPLY_PBXPROJ, project) if File.read(SHOPLY_PBXPROJ) != project
 
+  info_version = shoply_read_plist_value(SHOPLY_INFO_PLIST, "CFBundleShortVersionString")
+  info_build = shoply_read_plist_value(SHOPLY_INFO_PLIST, "CFBundleVersion")
+  shoply_set_plist_value!(SHOPLY_INFO_PLIST, "CFBundleShortVersionString", version) unless info_version == "$(MARKETING_VERSION)"
+  shoply_set_plist_value!(SHOPLY_INFO_PLIST, "CFBundleVersion", build_number) unless info_build == "$(CURRENT_PROJECT_VERSION)"
+
+  expo_runtime = shoply_read_plist_value(SHOPLY_EXPO_PLIST, "EXUpdatesRuntimeVersion", required: false)
+  shoply_set_plist_value!(SHOPLY_EXPO_PLIST, "EXUpdatesRuntimeVersion", version) if expo_runtime
+
   shoply_ui.success("Expo and Xcode versions are synchronized: #{version} (#{build_number})")
   { version: version, build_number: build_number }
+end
+
+def shoply_read_plist_value(path, key, required: true)
+  stdout, stderr, status = Open3.capture3(
+    "/usr/libexec/PlistBuddy",
+    "-c", "Print :#{key}",
+    path
+  )
+  return stdout.strip if status.success?
+  return nil unless required
+
+  shoply_ui.user_error!("Could not read #{key} from #{path}: #{stderr.strip}")
+end
+
+def shoply_set_plist_value!(path, key, value)
+  current = shoply_read_plist_value(path, key)
+  return if current == value.to_s
+
+  _stdout, stderr, status = Open3.capture3(
+    "/usr/libexec/PlistBuddy",
+    "-c", "Set :#{key} #{value}",
+    path
+  )
+  shoply_ui.user_error!("Could not update #{key} in #{path}: #{stderr.strip}") unless status.success?
 end
 
 def shoply_sync_requested_version!(options = {})
@@ -398,6 +434,7 @@ def shoply_doctor!
     SHOPLY_EAS_CONFIG,
     SHOPLY_PBXPROJ,
     File.join(SHOPLY_WORKSPACE, "contents.xcworkspacedata"),
+    SHOPLY_EXPO_PLIST,
     File.join(SHOPLY_IOS_DIR, "Podfile.lock"),
     File.join(SHOPLY_IOS_DIR, ".xcode.env")
   ]
@@ -430,9 +467,23 @@ def shoply_doctor!
   state = shoply_version_state
   shoply_validate_version!(state[:version], state[:build_number])
 
-  info_plist = File.read(SHOPLY_INFO_PLIST)
-  unless info_plist.include?("$(MARKETING_VERSION)") && info_plist.include?("$(CURRENT_PROJECT_VERSION)")
-    shoply_ui.user_error!("Info.plist must inherit MARKETING_VERSION and CURRENT_PROJECT_VERSION")
+  runtime_version = config["runtimeVersion"]
+  if runtime_version.is_a?(String) && runtime_version != state[:version]
+    shoply_ui.user_error!("Expo runtimeVersion mismatch: #{runtime_version} (expected #{state[:version]})")
+  end
+
+  info_version = shoply_read_plist_value(SHOPLY_INFO_PLIST, "CFBundleShortVersionString")
+  info_build = shoply_read_plist_value(SHOPLY_INFO_PLIST, "CFBundleVersion")
+  unless ["$(MARKETING_VERSION)", state[:version]].include?(info_version) &&
+         ["$(CURRENT_PROJECT_VERSION)", state[:build_number]].include?(info_build)
+    shoply_ui.user_error!(
+      "Info.plist version mismatch: #{info_version} (#{info_build}), expected #{state[:version]} (#{state[:build_number]})"
+    )
+  end
+
+  expo_runtime = shoply_read_plist_value(SHOPLY_EXPO_PLIST, "EXUpdatesRuntimeVersion", required: false)
+  if expo_runtime && expo_runtime != state[:version]
+    shoply_ui.user_error!("Expo native runtime version mismatch: #{expo_runtime} (expected #{state[:version]})")
   end
 
   project_relative = "apps/mobile/ios/Shoply.xcodeproj/project.pbxproj"

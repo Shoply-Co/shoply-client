@@ -31,7 +31,10 @@ pnpm ios:release:doctor
 
 - `expo.version` → Xcode `MARKETING_VERSION` → `CFBundleShortVersionString`
 - `expo.ios.buildNumber` → Xcode `CURRENT_PROJECT_VERSION` → `CFBundleVersion`
+- 문자열형 `expo.runtimeVersion`과 네이티브 `EXUpdatesRuntimeVersion`은 `expo.version`과 함께 갱신
 - `eas.json`도 `appVersionSource: local`로 맞춰 두었습니다.
+
+Expo가 네이티브 plist에 버전 값을 직접 기록한 프로젝트와 Xcode 변수 참조를 유지한 프로젝트를 모두 지원합니다. Fastlane 동기화는 직접 기록된 값을 자동으로 갱신하고, doctor는 Expo·Xcode·Info.plist·Expo Updates runtime의 불일치를 차단합니다.
 
 직접 동기화:
 
