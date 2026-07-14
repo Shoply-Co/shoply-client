@@ -105,6 +105,14 @@ function RootStack() {
         <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
         <Stack.Screen name="onboarding" options={{ animation: "none" }} />
         <Stack.Screen name="policies/consents" options={{ animation: "none" }} />
+        <Stack.Screen
+          name="review/[reviewId]"
+          options={{ animation: "fade", animationDuration: 220 }}
+        />
+        <Stack.Screen
+          name="magazine/[issueId]/review/[reviewId]"
+          options={{ animation: "fade", animationDuration: 220 }}
+        />
       </Stack>
     </View>
   );

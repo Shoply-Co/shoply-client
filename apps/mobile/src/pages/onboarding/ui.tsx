@@ -1,10 +1,14 @@
+import { Image as ExpoImage } from "expo-image";
+import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
-import { UserRound } from "lucide-react-native";
+import { Camera, UserRound } from "lucide-react-native";
 import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -15,6 +19,7 @@ import { Button, ShoplyText, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
 import { useAccountOverview } from "@/entities/user";
 import { saveOnboarding } from "@/features/onboarding-update";
+import { uploadProfileImage, type ProfileImageUploadInput } from "@/features/profile-image-upload";
 import { queryClient } from "@/shared/api/query-client";
 
 export function OnboardingPage() {
@@ -22,6 +27,8 @@ export function OnboardingPage() {
   const { user, refreshSessionState } = useSession();
   const { data: account } = useAccountOverview(Boolean(user));
   const [nickname, setNickname] = useState("");
+  const [profileImageUrl, setProfileImageUrl] = useState("");
+  const [selectedImage, setSelectedImage] = useState<ProfileImageUploadInput | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const nicknameReady = nickname.trim().length >= 2;
 
@@ -30,6 +37,39 @@ export function OnboardingPage() {
       setNickname(account.profile.nickname);
     }
   }, [account?.profile?.nickname, nickname]);
+
+  useEffect(() => {
+    if (!profileImageUrl && account?.profile?.profileImageUrl) {
+      setProfileImageUrl(account.profile.profileImageUrl);
+    }
+  }, [account?.profile?.profileImageUrl, profileImageUrl]);
+
+  const pickProfileImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("사진 접근 권한 필요", "프로필 이미지를 선택하려면 사진 접근 권한이 필요합니다.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.9
+    });
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    if (!asset?.uri) return;
+    setSelectedImage({
+      file: asset.file ?? null,
+      uri: asset.uri,
+      fileName: asset.fileName,
+      mimeType: asset.mimeType
+    });
+    setProfileImageUrl(asset.uri);
+    void Haptics.selectionAsync();
+  };
 
   const complete = async () => {
     const trimmedNickname = nickname.trim();
@@ -40,8 +80,10 @@ export function OnboardingPage() {
 
     setSubmitting(true);
     try {
+      const uploadedImage = selectedImage ? await uploadProfileImage(selectedImage) : null;
       await saveOnboarding({
-        nickname: trimmedNickname
+        nickname: trimmedNickname,
+        profileImageUrl: uploadedImage?.publicUrl ?? (profileImageUrl || null)
       });
       await queryClient.invalidateQueries({ queryKey: ["account", "overview"] });
       await refreshSessionState();
@@ -103,6 +145,49 @@ export function OnboardingPage() {
           </View>
 
           <View style={styles.section}>
+            <View style={styles.profileImageSection}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="프로필 이미지 선택"
+                onPress={pickProfileImage}
+                style={({ pressed }) => [
+                  styles.avatarButton,
+                  {
+                    backgroundColor: theme.semantic.color.surfaceMuted,
+                    borderColor: theme.semantic.color.border,
+                    opacity: pressed ? 0.86 : 1
+                  }
+                ]}
+              >
+                {profileImageUrl ? (
+                  <ExpoImage
+                    source={{ uri: profileImageUrl }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <Camera size={28} color={theme.semantic.color.primary} />
+                )}
+                <View
+                  style={[
+                    styles.avatarEditBadge,
+                    { backgroundColor: theme.semantic.color.primary }
+                  ]}
+                >
+                  <Camera size={13} color={theme.semantic.color.textInverse} />
+                </View>
+              </Pressable>
+              <Button
+                label={profileImageUrl ? "프로필 이미지 변경" : "프로필 이미지 등록"}
+                size="sm"
+                variant="secondary"
+                onPress={pickProfileImage}
+              />
+              <ShoplyText variant="caption" color="textMuted" align="center">
+                선택 사항이며 언제든 계정정보에서 바꿀 수 있어요.
+              </ShoplyText>
+            </View>
+
             <View style={styles.sectionTitle}>
               <UserRound size={18} color={theme.semantic.color.primary} />
               <ShoplyText variant="titleMd">닉네임</ShoplyText>
@@ -145,6 +230,25 @@ const styles = StyleSheet.create({
   actions: {
     paddingTop: 4
   },
+  avatarButton: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 104,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 104
+  },
+  avatarEditBadge: {
+    alignItems: "center",
+    borderRadius: 999,
+    bottom: 7,
+    height: 28,
+    justifyContent: "center",
+    position: "absolute",
+    right: 7,
+    width: 28
+  },
   centerPanel: {
     alignItems: "center",
     flex: 1,
@@ -176,6 +280,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 48,
     paddingHorizontal: 12
+  },
+  profileImageSection: {
+    alignItems: "center",
+    gap: 9,
+    paddingBottom: 10,
+    paddingTop: 4
   },
   section: {
     gap: 10

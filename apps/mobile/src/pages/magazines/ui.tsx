@@ -52,6 +52,7 @@ const EDITION_NARROW_WIDTH = Math.floor((EDITION_GRID_WIDTH - EDITION_GRID_GAP) 
 const EDITION_WIDE_WIDTH = EDITION_GRID_WIDTH - EDITION_GRID_GAP - EDITION_NARROW_WIDTH - 2;
 const EDITION_HALF_WIDTH = Math.floor((EDITION_GRID_WIDTH - EDITION_GRID_GAP - 2) / 2);
 const TEMPLATE_CARD_WIDTH = SCREEN_WIDTH - 56;
+const MAGAZINE_SECTION_LIMIT = 5;
 
 export function MagazinesPage() {
   const theme = useShoplyTheme();
@@ -79,8 +80,10 @@ export function MagazinesPage() {
     }),
     [mine.data]
   );
-  const heroIssues =
-    cadence === "edition" ? mineByCadence.edition : mineByCadence[cadence].slice(0, 4);
+  const heroIssues = (cadence === "edition" ? mineByCadence.edition : mineByCadence[cadence]).slice(
+    0,
+    MAGAZINE_SECTION_LIMIT
+  );
 
   useEffect(() => {
     const visible = [
@@ -122,7 +125,7 @@ export function MagazinesPage() {
       >
         <MagazineMasthead scrollY={scrollY} />
 
-        <EditorialSectionHeading index="01" eyebrow="MY PUBLICATION" title="내 잡지" />
+        <EditorialSectionHeading index="01" eyebrow="MY SELECTIONS" title="나의 셀렉션" />
         <CadenceSelector value={cadence} onChange={setCadence} />
 
         {mine.isPending ? (
@@ -268,7 +271,7 @@ function MagazineMasthead({ scrollY }: { scrollY: SharedValue<number> }) {
           SHOPLY EDITORIAL
         </ShoplyText>
         <ShoplyText variant="caption" color="textMuted">
-          SEOUL · 2026
+          GLOBAL · 2026
         </ShoplyText>
       </View>
       <View style={styles.mastheadWordmarkRail}>
@@ -333,10 +336,10 @@ function CadenceSelector({
   onChange: (value: MagazineHomeTab) => void;
 }) {
   const theme = useShoplyTheme();
-  const tabs: Array<{ value: MagazineHomeTab; label: string; index: string }> = [
-    { value: "monthly", label: "월간", index: "M" },
-    { value: "weekly", label: "주간", index: "W" },
-    { value: "edition", label: "에디션", index: "E" }
+  const tabs: Array<{ value: MagazineHomeTab; label: string }> = [
+    { value: "monthly", label: "월간" },
+    { value: "weekly", label: "주간" },
+    { value: "edition", label: "에디션" }
   ];
   return (
     <View
@@ -357,14 +360,6 @@ function CadenceSelector({
               { opacity: pressed ? 0.62 : 1 }
             ]}
           >
-            <ShoplyText
-              variant="caption"
-              style={{
-                color: selected ? theme.semantic.color.primary : theme.semantic.color.textMuted
-              }}
-            >
-              {tab.index}
-            </ShoplyText>
             <ShoplyText
               variant="labelLg"
               style={{
@@ -770,7 +765,7 @@ function PeopleStrip({
   emptyBody: string;
   onSubscribe: (issue: MagazineSummary) => void;
 }) {
-  const people = uniquePeople(issues);
+  const people = uniquePeople(issues).slice(0, MAGAZINE_SECTION_LIMIT);
   if (loading) return <RowSkeleton />;
   if (!people.length) return <EmptyShelf title={emptyTitle} body={emptyBody} />;
   return (

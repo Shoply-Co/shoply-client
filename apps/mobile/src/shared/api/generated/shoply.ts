@@ -3671,6 +3671,11 @@ export interface MagazineCustomSourceListEnvelope {
 }
 
 /**
+ * Request cannot be processed in the current resource state
+ */
+export type BadRequestResponse = ErrorEnvelope;
+
+/**
  * Authentication required or invalid token
  */
 export type UnauthorizedResponse = ErrorEnvelope;
@@ -8977,6 +8982,59 @@ export const updateMagazineIssue = async (issueId: string,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(updateMagazineRequest)
+  }
+);}
+
+
+
+export type deleteMagazineIssueResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteMagazineIssueResponse400 = {
+  data: BadRequestResponse
+  status: 400
+}
+
+export type deleteMagazineIssueResponse403 = {
+  data: ForbiddenResponse
+  status: 403
+}
+
+export type deleteMagazineIssueResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type deleteMagazineIssueResponseSuccess = (deleteMagazineIssueResponse204) & {
+  headers: Headers;
+};
+export type deleteMagazineIssueResponseError = (deleteMagazineIssueResponse400 | deleteMagazineIssueResponse403 | deleteMagazineIssueResponse404) & {
+  headers: Headers;
+};
+
+export type deleteMagazineIssueResponse = (deleteMagazineIssueResponseSuccess | deleteMagazineIssueResponseError)
+
+export const getDeleteMagazineIssueUrl = (issueId: string,) => {
+
+
+
+
+  return `/magazines/${issueId}`
+}
+
+/**
+ * @summary Soft-delete a custom edition owned by the current user
+ */
+export const deleteMagazineIssue = async (issueId: string, options?: RequestInit): Promise<deleteMagazineIssueResponse> => {
+
+  return shoplyFetch<deleteMagazineIssueResponse>(getDeleteMagazineIssueUrl(issueId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}
 

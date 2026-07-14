@@ -131,6 +131,7 @@ export function LinkStickerCanvas({
   const mediaStartX = useSharedValue(0);
   const mediaStartY = useSharedValue(0);
   const canTransformMedia = mediaTransformEnabled && mediaType === "image";
+  const canGestureMedia = !selectedStickerId;
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -166,7 +167,7 @@ export function LinkStickerCanvas({
   ]);
 
   const mediaPinch = Gesture.Pinch()
-    .enabled(Boolean(mediaUri) && canTransformMedia)
+    .enabled(Boolean(mediaUri) && canTransformMedia && canGestureMedia)
     .onStart(() => {
       mediaStartScale.value = mediaScale.value;
     })
@@ -212,7 +213,7 @@ export function LinkStickerCanvas({
     });
 
   const mediaPan = Gesture.Pan()
-    .enabled(Boolean(mediaUri))
+    .enabled(Boolean(mediaUri) && canGestureMedia)
     .onStart(() => {
       mediaStartX.value = mediaTranslateX.value;
       mediaStartY.value = mediaTranslateY.value;
@@ -452,6 +453,10 @@ function DraggableSticker({
       : isTextSticker
         ? Math.max(minimumSize.height, canvasSize.height * sticker.heightRatio)
         : Math.max(minimumSize.height, canvasSize.height * sticker.heightRatio);
+  const resizeCornerHitSize = Math.min(
+    24,
+    Math.max(14, Math.min(stickerWidth, stickerHeight) * 0.28)
+  );
   const textFontSize = stickerTextFontSize(stickerHeight, sticker.textScale, sticker.fontSizePx);
   const emojiFontSize = Math.max(28, Math.min(stickerWidth, stickerHeight) * 0.82);
   const minWidthRatio = canvasSize.width > 0 ? ratio(minimumSize.width, canvasSize.width) : 0.1;
@@ -514,13 +519,14 @@ function DraggableSticker({
 
   const panGesture = Gesture.Pan()
     .enabled(canvasSize.width > 0 && canvasSize.height > 0)
-    .hitSlop(12)
+    .hitSlop(18)
+    .shouldCancelWhenOutside(false)
     .onBegin((event) => {
       resizing.value =
         selected &&
         supportsCornerResize &&
-        event.x >= Math.max(0, stickerWidth - 34) &&
-        event.y >= Math.max(0, stickerHeight - 34);
+        event.x >= Math.max(0, stickerWidth - resizeCornerHitSize) &&
+        event.y >= Math.max(0, stickerHeight - resizeCornerHitSize);
       runOnJS(onSelectSticker)(sticker.id);
     })
     .onStart(() => {
@@ -1209,19 +1215,21 @@ const styles = StyleSheet.create({
   },
   resizeHandle: {
     backgroundColor: "transparent",
-    borderWidth: 0,
-    height: 1,
-    width: 1
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
+    borderBottomRightRadius: 3,
+    height: 11,
+    width: 11
   },
   resizeHandleTarget: {
     alignItems: "flex-end",
     bottom: 0,
-    height: 44,
+    height: 30,
     justifyContent: "flex-end",
-    padding: 7,
+    padding: 5,
     position: "absolute",
     right: 0,
-    width: 44
+    width: 30
   },
   hint: {
     alignItems: "center",

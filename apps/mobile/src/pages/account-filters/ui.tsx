@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { ArrowLeft, SlidersHorizontal } from "lucide-react-native";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Chip, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
@@ -20,6 +21,7 @@ import {
   type CatalogFilterValueMap
 } from "@/features/catalog-filter-input";
 import { goBackOrReplace } from "@/shared/lib/navigation";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 
 export function AccountFiltersPage() {
   const { user } = useSession();
@@ -243,21 +245,33 @@ function childCategoryOptions(category: CategoryOption | null): CategoryOption[]
 
 function AccountFiltersFrame({ children }: { children: ReactNode }) {
   const theme = useShoplyTheme();
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
 
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
       edges={["top"]}
     >
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
-          <TextBackButton />
-          <View style={{ flex: 1 }}>
-            <ShoplyText variant="titleLg">맞춤 필터 설정</ShoplyText>
+      <Animated.ScrollView
+        contentContainerStyle={styles.content}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
+      >
+        <AdaptiveStickyHeader scrollY={scrollY} style={styles.stickyHeader}>
+          <View style={styles.topBar}>
+            <TextBackButton />
+            <View style={{ flex: 1 }}>
+              <ShoplyText variant="titleLg">맞춤 필터 설정</ShoplyText>
+            </View>
           </View>
-        </View>
+        </AdaptiveStickyHeader>
         {children}
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 }
@@ -399,5 +413,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 10
+  },
+  stickyHeader: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    paddingVertical: 4
   }
 });

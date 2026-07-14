@@ -1,0 +1,1 @@
+export { MagazineReviewDetailPage } from "./ui";

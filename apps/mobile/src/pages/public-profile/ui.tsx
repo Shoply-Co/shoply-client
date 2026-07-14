@@ -6,6 +6,7 @@ import { ArrowLeft, SlidersHorizontal, X } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Chip, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
@@ -26,6 +27,7 @@ import { apiRequest } from "@/shared/api/client";
 import { captureActionEventsQuietly } from "@/features/event-capture";
 import { goBackOrReplace } from "@/shared/lib/navigation";
 import { ShoplySMonogram } from "@/shared/ui/brand";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 import type { ReviewSummary as ApiReviewSummary, UserProfile } from "@/shared/api/generated/shoply";
 
 interface PageResult<T> {
@@ -50,10 +52,14 @@ const sortOptions = [
 type ContentScope = (typeof contentScopes)[number]["id"];
 type SortOption = (typeof sortOptions)[number]["id"];
 type ProfileTab = "posts" | "magazines";
-type MagazineCadence = "monthly" | "weekly";
+type MagazineCadence = "monthly" | "weekly" | "edition";
 
 export function PublicProfilePage() {
   const theme = useShoplyTheme();
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
   const queryClient = useQueryClient();
   const { user } = useSession();
   const { userId } = useLocalSearchParams<{ userId?: string }>();
@@ -84,12 +90,14 @@ export function PublicProfilePage() {
   });
   useEffect(() => {
     if (!targetUserId) return;
-    captureActionEventsQuietly([{
-      eventType: "profile_impression",
-      targetType: "user_profile",
-      targetId: targetUserId,
-      sourceSurface: "public_profile"
-    }]);
+    captureActionEventsQuietly([
+      {
+        eventType: "profile_impression",
+        targetType: "user_profile",
+        targetId: targetUserId,
+        sourceSurface: "public_profile"
+      }
+    ]);
   }, [targetUserId]);
   const reviewsQuery = useQuery({
     queryKey: ["profile", "reviews", targetUserId],
@@ -140,7 +148,12 @@ export function PublicProfilePage() {
     [contentScope, reviewsQuery.data, selectedCategoryIds, sortBy]
   );
   const displayedMagazines = useMemo(
-    () => (magazineQuery.data ?? []).filter((issue) => issue.cadence === magazineCadence),
+    () =>
+      (magazineQuery.data ?? []).filter((issue) =>
+        magazineCadence === "edition"
+          ? issue.issueType === "custom"
+          : issue.issueType === "automatic" && issue.cadence === magazineCadence
+      ),
     [magazineCadence, magazineQuery.data]
   );
 
@@ -188,30 +201,33 @@ export function PublicProfilePage() {
 
   const listHeader = (
     <View style={styles.headerWrap}>
-      <View style={styles.topBar}>
-        <IconButton
-          accessibilityLabel="뒤로 가기"
-          onPress={() => goBackOrReplace()}
-          icon={<ArrowLeft size={22} color={theme.semantic.color.text} />}
-        />
-        <ShoplyText variant="titleLg" style={{ flex: 1 }}>프로필</ShoplyText>
-      </View>
-
       {showProfileSkeleton ? (
         <ProfileHeaderSkeleton />
       ) : profileQuery.isError && !profile ? null : (
         <View style={styles.profileHeader}>
           <View style={[styles.avatar, { backgroundColor: theme.semantic.color.surfaceMuted }]}>
             {profile?.profileImageUrl ? (
-              <ExpoImage source={{ uri: profile.profileImageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <ExpoImage
+                source={{ uri: profile.profileImageUrl }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
             ) : (
               <ShoplySMonogram size={38} color={theme.semantic.color.primary} />
             )}
           </View>
           <View style={styles.profileCopy}>
-            <ShoplyText variant="titleLg" numberOfLines={1}>{profile?.nickname ?? "Shoply 작성자"}</ShoplyText>
-            <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>@{targetUserId?.slice(0, 8) ?? "profile"}</ShoplyText>
-            {profile?.bio ? <ShoplyText variant="bodyMd" numberOfLines={2}>{profile.bio}</ShoplyText> : null}
+            <ShoplyText variant="titleLg" numberOfLines={1}>
+              {profile?.nickname ?? "Shoply 작성자"}
+            </ShoplyText>
+            <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>
+              @{targetUserId?.slice(0, 8) ?? "profile"}
+            </ShoplyText>
+            {profile?.bio ? (
+              <ShoplyText variant="bodyMd" numberOfLines={2}>
+                {profile.bio}
+              </ShoplyText>
+            ) : null}
           </View>
         </View>
       )}
@@ -219,11 +235,19 @@ export function PublicProfilePage() {
       {!isMine && profile ? (
         <View style={styles.actions}>
           <Button label="작성자 픽" onPress={pick} style={{ flex: 1 }} />
-          <Button label="리뷰 탐색" variant="secondary" onPress={() => router.push("/(tabs)/search")} style={{ flex: 1 }} />
+          <Button
+            label="리뷰 탐색"
+            variant="secondary"
+            onPress={() => router.push("/(tabs)/search")}
+            style={{ flex: 1 }}
+          />
         </View>
       ) : null}
 
-      <View accessibilityLabel="프로필 콘텐츠 탭" style={[styles.profileTabs, { borderColor: theme.semantic.color.border }]}>
+      <View
+        accessibilityLabel="프로필 콘텐츠 탭"
+        style={[styles.profileTabs, { borderColor: theme.semantic.color.border }]}
+      >
         {(["posts", "magazines"] as ProfileTab[]).map((tab) => {
           const selected = activeTab === tab;
           return (
@@ -235,7 +259,10 @@ export function PublicProfilePage() {
                 videoPreview.pausePreview();
                 setActiveTab(tab);
               }}
-              style={[styles.profileTab, selected ? { borderColor: theme.semantic.color.primary } : null]}
+              style={[
+                styles.profileTab,
+                selected ? { borderColor: theme.semantic.color.primary } : null
+              ]}
             >
               <ShoplyText variant="labelLg" color={selected ? "primary" : "textMuted"}>
                 {tab === "posts" ? "게시물" : "잡지"}
@@ -247,24 +274,46 @@ export function PublicProfilePage() {
 
       {activeTab === "posts" ? (
         <View style={styles.sectionHeader}>
-          <ShoplyText variant="titleMd" style={{ flex: 1 }}>{isMine ? "내가 올린 게시물" : "게시글 목록"}</ShoplyText>
+          <ShoplyText variant="titleMd" style={{ flex: 1 }}>
+            {isMine ? "내가 올린 게시물" : "게시글 목록"}
+          </ShoplyText>
           <Button
             size="icon"
             variant={activeFilterCount ? "primary" : "secondary"}
             accessibilityLabel="게시글 필터 열기"
-            icon={<SlidersHorizontal size={19} color={activeFilterCount ? "white" : theme.semantic.color.primary} />}
+            icon={
+              <SlidersHorizontal
+                size={19}
+                color={activeFilterCount ? "white" : theme.semantic.color.primary}
+              />
+            }
             onPress={openFilters}
           />
         </View>
       ) : (
         <View style={styles.magazineHeader}>
           <View>
-            <ShoplyText variant="caption" color="primary">SHOPLY ISSUES</ShoplyText>
+            <ShoplyText variant="caption" color="primary">
+              SHOPLY ISSUES
+            </ShoplyText>
             <ShoplyText variant="titleMd">잡지</ShoplyText>
           </View>
           <View style={styles.magazineCadenceTabs}>
-            <Chip label="월간" selected={magazineCadence === "monthly"} onPress={() => setMagazineCadence("monthly")} />
-            <Chip label="주간" selected={magazineCadence === "weekly"} onPress={() => setMagazineCadence("weekly")} />
+            <Chip
+              label="월간"
+              selected={magazineCadence === "monthly"}
+              onPress={() => setMagazineCadence("monthly")}
+            />
+            <Chip
+              label="주간"
+              selected={magazineCadence === "weekly"}
+              onPress={() => setMagazineCadence("weekly")}
+            />
+            <Chip
+              label="에디션"
+              selected={magazineCadence === "edition"}
+              onPress={() => setMagazineCadence("edition")}
+            />
           </View>
         </View>
       )}
@@ -276,6 +325,18 @@ export function PublicProfilePage() {
       style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
       edges={["top"]}
     >
+      <AdaptiveStickyHeader scrollY={scrollY} style={styles.stickyHeader}>
+        <View style={styles.topBar}>
+          <IconButton
+            accessibilityLabel="뒤로 가기"
+            onPress={() => goBackOrReplace()}
+            icon={<ArrowLeft size={22} color={theme.semantic.color.text} />}
+          />
+          <ShoplyText variant="titleLg" style={{ flex: 1 }}>
+            프로필
+          </ShoplyText>
+        </View>
+      </AdaptiveStickyHeader>
       {activeTab === "posts" ? (
         <FlashList
           data={enabled && !showReviewSkeleton ? displayedReviews : []}
@@ -284,13 +345,16 @@ export function PublicProfilePage() {
           keyExtractor={(item) => item.id}
           viewabilityConfig={videoPreview.viewabilityConfig}
           onViewableItemsChanged={videoPreview.onViewableItemsChanged}
+          onScroll={onScroll}
           ListHeaderComponent={listHeader}
           renderItem={({ item }) => (
             <ReviewTile
               review={item}
               columns={3}
               videoPreviewActive={videoPreview.activePreviewReviewId === item.id}
-              onPress={() => router.push({ pathname: "/review/[reviewId]", params: { reviewId: item.id } })}
+              onPress={() =>
+                router.push({ pathname: "/review/[reviewId]", params: { reviewId: item.id } })
+              }
             />
           )}
           onScrollBeginDrag={videoPreview.pausePreview}
@@ -300,15 +364,33 @@ export function PublicProfilePage() {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             !enabled ? (
-              <StatePanel title="로그인이 필요해요" body="로그인 후 프로필을 확인할 수 있어요." actionLabel="로그인" onAction={() => router.push("/login")} />
+              <StatePanel
+                title="로그인이 필요해요"
+                body="로그인 후 프로필을 확인할 수 있어요."
+                actionLabel="로그인"
+                onAction={() => router.push("/login")}
+              />
             ) : showReviewSkeleton ? (
               <ProfileGridSkeleton />
             ) : profileQuery.isError && !profile ? (
-              <StatePanel title="프로필을 불러오지 못했어요" body="작성자 정보를 가져오지 못했습니다." actionLabel="다시 시도" onAction={() => void profileQuery.refetch()} />
+              <StatePanel
+                title="프로필을 불러오지 못했어요"
+                body="작성자 정보를 가져오지 못했습니다."
+                actionLabel="다시 시도"
+                onAction={() => void profileQuery.refetch()}
+              />
             ) : reviewsQuery.isFetching ? null : reviewsQuery.isError ? (
-              <StatePanel title="공개 리뷰를 불러오지 못했어요" body="잠시 후 다시 시도해주세요." actionLabel="다시 시도" onAction={() => void reviewsQuery.refetch()} />
+              <StatePanel
+                title="공개 리뷰를 불러오지 못했어요"
+                body="잠시 후 다시 시도해주세요."
+                actionLabel="다시 시도"
+                onAction={() => void reviewsQuery.refetch()}
+              />
             ) : (
-              <StatePanel title="게시글이 아직 없어요" body="선택한 조건에 맞는 공개 게시글이 없습니다." />
+              <StatePanel
+                title="게시글이 아직 없어요"
+                body="선택한 조건에 맞는 공개 게시글이 없습니다."
+              />
             )
           }
         />
@@ -317,20 +399,39 @@ export function PublicProfilePage() {
           data={enabled && !showMagazineSkeleton ? displayedMagazines : []}
           numColumns={2}
           keyExtractor={(item) => item.id}
+          onScroll={onScroll}
           ListHeaderComponent={listHeader}
           renderItem={({ item }) => <MagazineTile issue={item} />}
           contentContainerStyle={styles.magazineListContent}
           ListEmptyComponent={
             !enabled ? (
-              <StatePanel title="로그인이 필요해요" body="로그인 후 잡지를 확인할 수 있어요." actionLabel="로그인" onAction={() => router.push("/login")} />
+              <StatePanel
+                title="로그인이 필요해요"
+                body="로그인 후 잡지를 확인할 수 있어요."
+                actionLabel="로그인"
+                onAction={() => router.push("/login")}
+              />
             ) : showMagazineSkeleton ? (
               <MagazineGridSkeleton />
             ) : magazineQuery.isError ? (
-              <StatePanel title="잡지를 불러오지 못했어요" body="잠시 후 다시 시도해주세요." actionLabel="다시 시도" onAction={() => void magazineQuery.refetch()} />
+              <StatePanel
+                title="잡지를 불러오지 못했어요"
+                body="잠시 후 다시 시도해주세요."
+                actionLabel="다시 시도"
+                onAction={() => void magazineQuery.refetch()}
+              />
             ) : (
               <StatePanel
-                title={`${magazineCadence === "monthly" ? "월간" : "주간"} 잡지가 아직 없어요`}
-                body={isMine ? "자동 발행이 완료되면 이곳에 표시됩니다." : "공개된 잡지가 준비되면 이곳에 표시됩니다."}
+                title={`${magazineCadence === "edition" ? "에디션" : magazineCadence === "monthly" ? "월간" : "주간"}이 아직 없어요`}
+                body={
+                  magazineCadence === "edition"
+                    ? isMine
+                      ? "쇼플리에서 직접 만든 에디션이 이곳에 표시됩니다."
+                      : "작성자가 공개한 에디션이 준비되면 표시됩니다."
+                    : isMine
+                      ? "자동 발행이 완료되면 이곳에 표시됩니다."
+                      : "공개된 잡지가 준비되면 이곳에 표시됩니다."
+                }
               />
             )
           }
@@ -456,18 +557,33 @@ function MagazineTile({ issue }: { issue: MagazineSummary }) {
     >
       <View style={[styles.magazineCover, { backgroundColor: theme.semantic.color.surfaceMuted }]}>
         {issue.coverImageUrl ? (
-          <ExpoImage source={{ uri: issue.coverImageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          <ExpoImage
+            source={{ uri: issue.coverImageUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
         ) : (
           <ShoplySMonogram size={64} color={theme.semantic.color.primary} />
         )}
-        <View style={[styles.magazineIssueLabel, { backgroundColor: theme.semantic.color.primary }]}>
-          <ShoplyText variant="caption" style={styles.magazineInverseText}>{issue.issueLabel}</ShoplyText>
+        <View
+          style={[styles.magazineIssueLabel, { backgroundColor: theme.semantic.color.primary }]}
+        >
+          <ShoplyText variant="caption" style={styles.magazineInverseText}>
+            {issue.issueLabel}
+          </ShoplyText>
         </View>
         <View style={styles.magazineCoverCopy}>
-          <ShoplyText style={styles.magazineCoverTitle} numberOfLines={3}>{issue.coverTitle ?? "SHOPLY ISSUE"}</ShoplyText>
+          <ShoplyText style={styles.magazineCoverTitle} numberOfLines={3}>
+            {issue.coverTitle ?? "SHOPLY ISSUE"}
+          </ShoplyText>
         </View>
       </View>
-      <ShoplyText variant="caption" color="textMuted" numberOfLines={2} style={styles.magazineSubtitle}>
+      <ShoplyText
+        variant="caption"
+        color="textMuted"
+        numberOfLines={2}
+        style={styles.magazineSubtitle}
+      >
         {issue.coverSubtitle ?? `${issue.itemCount}개의 장면을 담은 이번 호`}
       </ShoplyText>
     </Pressable>
@@ -715,6 +831,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     margin: 1.5,
     overflow: "hidden"
+  },
+  stickyHeader: {
+    paddingHorizontal: 10,
+    paddingVertical: 4
   },
   topBar: {
     alignItems: "center",

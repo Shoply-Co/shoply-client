@@ -2,17 +2,34 @@ import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
 import { ReactNode, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleProp, StyleSheet, TextInput, TextInputProps, View, ViewStyle } from "react-native";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  TextInput,
+  TextInputProps,
+  View,
+  ViewStyle
+} from "react-native";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
 import { useAccountOverview } from "@/entities/user";
 import { apiRequest } from "@/shared/api/client";
 import { goBackOrReplace } from "@/shared/lib/navigation";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 import type { PayoutProfile, TaxProfile } from "@/shared/api/generated/shoply";
 
 export function PayoutProfilePage() {
   const theme = useShoplyTheme();
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
   const queryClient = useQueryClient();
   const { user, refreshSessionState } = useSession();
   const { data: account, isError, isPending, refetch } = useAccountOverview(Boolean(user));
@@ -41,7 +58,10 @@ export function PayoutProfilePage() {
       await syncAccount();
       Alert.alert("저장 완료", successMessage);
     } catch (error) {
-      Alert.alert("저장 실패", error instanceof Error ? error.message : "잠시 후 다시 시도해주세요.");
+      Alert.alert(
+        "저장 실패",
+        error instanceof Error ? error.message : "잠시 후 다시 시도해주세요."
+      );
     } finally {
       setSubmitting(null);
     }
@@ -128,18 +148,41 @@ export function PayoutProfilePage() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.semantic.color.background }} edges={["top"]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.topBar}>
-            <TextBackButton />
-            <View style={{ flex: 1 }}>
-              <ShoplyText variant="titleLg">지급 정보</ShoplyText>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
+      edges={["top"]}
+    >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <Animated.ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[0]}
+        >
+          <AdaptiveStickyHeader scrollY={scrollY} style={styles.stickyHeader}>
+            <View style={styles.topBar}>
+              <TextBackButton />
+              <View style={{ flex: 1 }}>
+                <ShoplyText variant="titleLg">지급 정보</ShoplyText>
+              </View>
             </View>
-          </View>
+          </AdaptiveStickyHeader>
 
           {!user ? (
-            <View style={[styles.panel, { backgroundColor: theme.semantic.color.surfaceMuted, borderColor: theme.semantic.color.border }]}>
+            <View
+              style={[
+                styles.panel,
+                {
+                  backgroundColor: theme.semantic.color.surfaceMuted,
+                  borderColor: theme.semantic.color.border
+                }
+              ]}
+            >
               <ShoplyText variant="titleMd">로그인이 필요해요</ShoplyText>
               <Button label="로그인으로 이동" onPress={() => router.replace("/login")} />
             </View>
@@ -156,13 +199,23 @@ export function PayoutProfilePage() {
             />
           ) : (
             <>
-              <View style={[styles.summaryPanel, { backgroundColor: theme.semantic.color.surfaceMuted }]}>
+              <View
+                style={[
+                  styles.summaryPanel,
+                  { backgroundColor: theme.semantic.color.surfaceMuted }
+                ]}
+              >
                 <View style={styles.summaryTop}>
                   <ShoplyText variant="titleMd">지급 준비</ShoplyText>
-                  <StatusPill ready={payout?.status === "payable"} label={payoutStatusLabel(payout)} />
+                  <StatusPill
+                    ready={payout?.status === "payable"}
+                    label={payoutStatusLabel(payout)}
+                  />
                 </View>
                 <ShoplyText variant="caption" color="textMuted">
-                  {payout?.bankAccountMasked ? `${payout.bankAccountMasked} 계좌 연결됨` : "계좌 연결 전"}
+                  {payout?.bankAccountMasked
+                    ? `${payout.bankAccountMasked} 계좌 연결됨`
+                    : "계좌 연결 전"}
                 </ShoplyText>
               </View>
 
@@ -177,13 +230,22 @@ export function PayoutProfilePage() {
 
               <StepPanel
                 title="휴대폰"
-                description={account?.me.phoneVerifiedAt ? `확인일 ${formatDate(account.me.phoneVerifiedAt)}` : "휴대폰 번호를 확인해주세요."}
+                description={
+                  account?.me.phoneVerifiedAt
+                    ? `확인일 ${formatDate(account.me.phoneVerifiedAt)}`
+                    : "휴대폰 번호를 확인해주세요."
+                }
                 ready={Boolean(payout?.phoneVerified || account?.me.phoneVerifiedAt)}
                 actionLabel="휴대폰 확인 저장"
                 loading={submitting === "phone"}
                 onPress={verifyPhone}
               >
-                <Field label="휴대폰 번호" value={phoneNumber} onChangeText={setPhoneNumber} keyboardType="phone-pad" />
+                <Field
+                  label="휴대폰 번호"
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                />
               </StepPanel>
 
               <StepPanel
@@ -195,8 +257,18 @@ export function PayoutProfilePage() {
                 onPress={verifyBank}
               >
                 <View style={styles.rowFields}>
-                  <Field label="은행 코드" value={bankCode} onChangeText={setBankCode} style={styles.rowField} />
-                  <Field label="예금주" value={holderName} onChangeText={setHolderName} style={styles.rowField} />
+                  <Field
+                    label="은행 코드"
+                    value={bankCode}
+                    onChangeText={setBankCode}
+                    style={styles.rowField}
+                  />
+                  <Field
+                    label="예금주"
+                    value={holderName}
+                    onChangeText={setHolderName}
+                    style={styles.rowField}
+                  />
                 </View>
                 <Field
                   label="계좌번호"
@@ -209,7 +281,9 @@ export function PayoutProfilePage() {
 
               <StepPanel
                 title="세무"
-                description={tax ? `현재 상태 ${taxStatusLabel(tax.status)}` : "세무 정보를 입력해주세요."}
+                description={
+                  tax ? `현재 상태 ${taxStatusLabel(tax.status)}` : "세무 정보를 입력해주세요."
+                }
                 ready={Boolean(payout?.taxProfileReady || tax?.status === "ready")}
                 actionLabel="세무 프로필 저장"
                 loading={submitting === "tax"}
@@ -219,7 +293,7 @@ export function PayoutProfilePage() {
               </StepPanel>
             </>
           )}
-        </ScrollView>
+        </Animated.ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -303,12 +377,21 @@ function StepPanel({
         </ShoplyText>
       </View>
       {children}
-      <Button label={ready ? "업데이트" : actionLabel} variant={ready ? "secondary" : "primary"} loading={loading} onPress={onPress} />
+      <Button
+        label={ready ? "업데이트" : actionLabel}
+        variant={ready ? "secondary" : "primary"}
+        loading={loading}
+        onPress={onPress}
+      />
     </View>
   );
 }
 
-function Field({ label, style, ...props }: TextInputProps & { label: string; style?: StyleProp<ViewStyle> }) {
+function Field({
+  label,
+  style,
+  ...props
+}: TextInputProps & { label: string; style?: StyleProp<ViewStyle> }) {
   const theme = useShoplyTheme();
   return (
     <View style={[styles.fieldGroup, style]}>
@@ -332,8 +415,21 @@ function Field({ label, style, ...props }: TextInputProps & { label: string; sty
 function StatusPill({ ready, label }: { ready: boolean; label: string }) {
   const theme = useShoplyTheme();
   return (
-    <View style={[styles.statusPill, { backgroundColor: ready ? theme.semantic.color.successFill : theme.semantic.color.primarySoft }]}>
-      <ShoplyText variant="caption" style={{ color: ready ? "white" : theme.semantic.color.primary }} numberOfLines={1}>
+    <View
+      style={[
+        styles.statusPill,
+        {
+          backgroundColor: ready
+            ? theme.semantic.color.successFill
+            : theme.semantic.color.primarySoft
+        }
+      ]}
+    >
+      <ShoplyText
+        variant="caption"
+        style={{ color: ready ? "white" : theme.semantic.color.primary }}
+        numberOfLines={1}
+      >
         {label}
       </ShoplyText>
     </View>
@@ -444,6 +540,11 @@ const styles = StyleSheet.create({
   skeletonPanel: {
     gap: 12,
     padding: 16
+  },
+  stickyHeader: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    paddingVertical: 4
   },
   topBar: {
     alignItems: "center",

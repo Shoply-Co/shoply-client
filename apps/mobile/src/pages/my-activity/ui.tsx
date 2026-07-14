@@ -5,6 +5,7 @@ import { ArrowLeft, SlidersHorizontal, X } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Chip, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
@@ -17,6 +18,7 @@ import {
 import type { ReviewSummary } from "@/entities/review";
 import { apiRequest } from "@/shared/api/client";
 import { goBackOrReplace } from "@/shared/lib/navigation";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 import type { ReviewSummary as ApiReviewSummary } from "@/shared/api/generated/shoply";
 
 interface PageResult<T> {
@@ -52,6 +54,10 @@ type SortOption = (typeof sortOptions)[number]["id"];
 
 export function MyActivityPage() {
   const theme = useShoplyTheme();
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
   const params = useLocalSearchParams<{ type?: string }>();
   const { user } = useSession();
   const listRef = useRef<FlashListRef<ReviewSummary>>(null);
@@ -134,6 +140,30 @@ export function MyActivityPage() {
       style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
       edges={["top"]}
     >
+      <AdaptiveStickyHeader scrollY={scrollY} style={styles.stickyHeader}>
+        <View style={styles.topBar}>
+          <IconButton
+            accessibilityLabel="뒤로 가기"
+            onPress={() => goBackOrReplace()}
+            icon={<ArrowLeft size={22} color={theme.semantic.color.text} />}
+          />
+          <ShoplyText variant="titleLg" style={{ flex: 1 }}>
+            활동 목록
+          </ShoplyText>
+          <Button
+            size="icon"
+            variant={activeFilterCount ? "primary" : "secondary"}
+            accessibilityLabel="활동 필터 열기"
+            onPress={openFilters}
+            icon={
+              <SlidersHorizontal
+                size={19}
+                color={activeFilterCount ? "white" : theme.semantic.color.primary}
+              />
+            }
+          />
+        </View>
+      </AdaptiveStickyHeader>
       <FlashList
         ref={listRef}
         data={user && !showActivitySkeleton ? displayedReviews : []}
@@ -142,30 +172,7 @@ export function MyActivityPage() {
         keyExtractor={(item) => item.id}
         viewabilityConfig={videoPreview.viewabilityConfig}
         onViewableItemsChanged={videoPreview.onViewableItemsChanged}
-        ListHeaderComponent={
-          <View style={styles.topBar}>
-            <IconButton
-              accessibilityLabel="뒤로 가기"
-              onPress={() => goBackOrReplace()}
-              icon={<ArrowLeft size={22} color={theme.semantic.color.text} />}
-            />
-            <ShoplyText variant="titleLg" style={{ flex: 1 }}>
-              활동 목록
-            </ShoplyText>
-            <Button
-              size="icon"
-              variant={activeFilterCount ? "primary" : "secondary"}
-              accessibilityLabel="활동 필터 열기"
-              onPress={openFilters}
-              icon={
-                <SlidersHorizontal
-                  size={19}
-                  color={activeFilterCount ? "white" : theme.semantic.color.primary}
-                />
-              }
-            />
-          </View>
-        }
+        onScroll={onScroll}
         renderItem={({ item }) => (
           <ReviewTile
             review={item}
@@ -421,6 +428,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     margin: 1.5,
     overflow: "hidden"
+  },
+  stickyHeader: {
+    paddingVertical: 2
   },
   topBar: {
     alignItems: "center",

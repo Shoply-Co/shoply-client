@@ -8,6 +8,7 @@ export {
   useHomeReviews,
   useReviewActivityState,
   useReviewDetail,
+  useReviewDetails,
   useReviewReportReasons,
   useSearchReviews,
   useToggleReviewInteraction
@@ -31,5 +32,10 @@ export type {
   ReviewDetailFeedSearchFilters,
   ReviewDetailFeedSurface
 } from "./model/detail-feed-context";
-export type { DisclosureState, ReviewLinkSticker, ReviewMediaItem, ReviewSummary } from "./model/types";
+export type {
+  DisclosureState,
+  ReviewLinkSticker,
+  ReviewMediaItem,
+  ReviewSummary
+} from "./model/types";
 export type { StickerArtworkVariant } from "./model/sticker-artwork";

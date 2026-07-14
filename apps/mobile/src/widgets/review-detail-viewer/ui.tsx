@@ -42,7 +42,8 @@ import {
   View
 } from "react-native";
 import { Gesture, GestureDetector, type GestureType } from "react-native-gesture-handler";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, ReduceMotion, ZoomIn } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
 import { openOutboundReviewLink } from "@/features/outbound-link-open";
@@ -63,6 +64,7 @@ import {
   useReviewActivityState,
   useHomeReviews,
   useReviewDetail,
+  useReviewDetails,
   useReviewReportReasons,
   useSearchReviews,
   useToggleReviewInteraction
@@ -80,6 +82,8 @@ import { AnimatedActionButton } from "./animated-action-button";
 interface ReviewDetailViewerProps {
   reviewId?: string;
   feedKey?: string | string[];
+  reviewIds?: string[];
+  sourceSurfaceOverride?: string;
 }
 
 const screen = Dimensions.get("window");
@@ -97,8 +101,14 @@ const DETAIL_ACTION_STACK_TOP = Math.round(
 );
 const DETAIL_MUTE_BUTTON_TOP = Math.round(Math.max(104, DETAIL_ACTION_STACK_TOP - 54));
 
-export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProps) {
+export function ReviewDetailViewer({
+  reviewId,
+  feedKey,
+  reviewIds = [],
+  sourceSurfaceOverride
+}: ReviewDetailViewerProps) {
   const theme = useShoplyTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useSession();
   const bodySheetRef = useRef<BottomSheetModal>(null);
   const feedContext = useMemo(() => getReviewDetailFeedContext(feedKey), [feedKey]);
@@ -109,10 +119,12 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
     isFetching,
     refetch: refetchReview
   } = useReviewDetail(reviewId);
+  const isMagazineFeed = reviewIds.length > 0;
+  const magazineFeedQuery = useReviewDetails(reviewIds, isMagazineFeed);
   const activityQuery = useReviewActivityState(Boolean(user));
   const reportReasonsQuery = useReviewReportReasons();
   const interactionMutation = useToggleReviewInteraction();
-  const shouldUseHomeFeed = !feedContext || feedContext.source === "home";
+  const shouldUseHomeFeed = !isMagazineFeed && (!feedContext || feedContext.source === "home");
   const homeFeedQuery = useHomeReviews(
     feedContext?.home?.categoryId,
     feedContext?.home?.refreshSeed,
@@ -124,25 +136,42 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
       ? (feedContext.search?.filters ?? emptySearchFilters)
       : emptySearchFilters,
     feedContext?.source === "search" ? feedContext.search?.refreshSeed : undefined,
-    { enabled: feedContext?.source === "search" }
+    { enabled: !isMagazineFeed && feedContext?.source === "search" }
   );
-  const feedReviews =
-    feedContext?.source === "search" ? (searchFeedQuery.data ?? []) : (homeFeedQuery.data ?? []);
-  const isFeedError =
-    feedContext?.source === "search" ? searchFeedQuery.isError : homeFeedQuery.isError;
-  const isFeedFetching =
-    feedContext?.source === "search" ? searchFeedQuery.isFetching : homeFeedQuery.isFetching;
-  const isFetchingNextFeedPage =
-    feedContext?.source === "search"
+  const feedReviews = isMagazineFeed
+    ? magazineFeedQuery.data
+    : feedContext?.source === "search"
+      ? (searchFeedQuery.data ?? [])
+      : (homeFeedQuery.data ?? []);
+  const isFeedError = isMagazineFeed
+    ? magazineFeedQuery.isError
+    : feedContext?.source === "search"
+      ? searchFeedQuery.isError
+      : homeFeedQuery.isError;
+  const isFeedFetching = isMagazineFeed
+    ? magazineFeedQuery.isFetching
+    : feedContext?.source === "search"
+      ? searchFeedQuery.isFetching
+      : homeFeedQuery.isFetching;
+  const isFetchingNextFeedPage = isMagazineFeed
+    ? false
+    : feedContext?.source === "search"
       ? searchFeedQuery.isFetchingNextPage
       : homeFeedQuery.isFetchingNextPage;
-  const hasNextFeedPage =
-    feedContext?.source === "search" ? searchFeedQuery.hasNextPage : homeFeedQuery.hasNextPage;
+  const hasNextFeedPage = isMagazineFeed
+    ? false
+    : feedContext?.source === "search"
+      ? searchFeedQuery.hasNextPage
+      : homeFeedQuery.hasNextPage;
   const fetchNextFeedPage =
     feedContext?.source === "search" ? searchFeedQuery.fetchNextPage : homeFeedQuery.fetchNextPage;
-  const refetchFeed =
-    feedContext?.source === "search" ? searchFeedQuery.refetch : homeFeedQuery.refetch;
+  const refetchFeed = isMagazineFeed
+    ? magazineFeedQuery.refetch
+    : feedContext?.source === "search"
+      ? searchFeedQuery.refetch
+      : homeFeedQuery.refetch;
   const data = useMemo(() => {
+    if (isMagazineFeed && magazineFeedQuery.isPending) return [];
     const mergedFeed = mergeDetailReviews(feedContext?.reviews ?? [], feedReviews);
     const withLoadedReview = loadedReview
       ? replaceOrPrependReview(mergedFeed, loadedReview)
@@ -158,7 +187,15 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
       }));
     if (!withLoadedReview.length && reviewId) return [];
     return withActivity(withLoadedReview);
-  }, [activityQuery.data, feedContext?.reviews, feedReviews, loadedReview, reviewId]);
+  }, [
+    activityQuery.data,
+    feedContext?.reviews,
+    feedReviews,
+    isMagazineFeed,
+    loadedReview,
+    magazineFeedQuery.isPending,
+    reviewId
+  ]);
   const initialScrollIndex = useMemo(() => {
     if (!data.length) return 0;
     const targetId = reviewId ?? feedContext?.selectedReviewId;
@@ -190,7 +227,9 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
     !loadedReview &&
     data.some((review) => review.id === reviewId && !hasCreatorNickname(review))
   );
-  const sourceSurface = feedContext?.source ?? "review_detail";
+  const sourceSurface =
+    sourceSurfaceOverride ??
+    (isMagazineFeed ? "magazine_detail" : (feedContext?.source ?? "review_detail"));
   const sheetReviewId = sheetReview?.id;
   const captureBodyConsumptionStage = useCallback(
     (stage: ConsumptionStage, activeMs: number, scrollDepth?: number) => {
@@ -343,12 +382,12 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
           targetType: "review",
           targetId: review.id,
           reviewId: review.id,
-          sourceSurface: feedContext?.source ?? "review_detail"
+          sourceSurface
         }
       ]);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
-    [feedContext?.source]
+    [sourceSurface]
   );
 
   const setReviewMediaIndex = useCallback(
@@ -454,7 +493,7 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
                 targetType: "review",
                 targetId: review.id,
                 reviewId: review.id,
-                sourceSurface: "review_detail"
+                sourceSurface
               }
             ]);
           },
@@ -474,55 +513,61 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
         }
       );
     },
-    [activityOverride, interactionMutation, requireUser]
+    [activityOverride, interactionMutation, requireUser, sourceSurface]
   );
 
-  const shareReview = useCallback(async (review: ReviewSummary) => {
-    const shareUrl = `shoply://review/${review.id}`;
-    try {
-      await Share.share({
-        title: review.productName,
-        message: `${review.productName}\n${review.body}\n${shareUrl}`,
-        url: shareUrl
-      });
-      captureActionEventsQuietly([
+  const shareReview = useCallback(
+    async (review: ReviewSummary) => {
+      const shareUrl = `shoply://review/${review.id}`;
+      try {
+        await Share.share({
+          title: review.productName,
+          message: `${review.productName}\n${review.body}\n${shareUrl}`,
+          url: shareUrl
+        });
+        captureActionEventsQuietly([
+          {
+            eventType: "share",
+            targetType: "review",
+            targetId: review.id,
+            reviewId: review.id,
+            sourceSurface
+          }
+        ]);
+      } catch (error) {
+        Alert.alert(
+          "공유 실패",
+          error instanceof Error ? error.message : "공유를 다시 시도해주세요."
+        );
+      }
+    },
+    [sourceSurface]
+  );
+
+  const openSticker = useCallback(
+    (review: ReviewSummary, sticker: ReviewLinkSticker) => {
+      Alert.alert("상품 링크 열기", `${sticker.merchantName}\n${sticker.domain}`, [
+        { text: "취소", style: "cancel" },
         {
-          eventType: "share",
-          targetType: "review",
-          targetId: review.id,
-          reviewId: review.id,
-          sourceSurface: "review_detail"
+          text: "열기",
+          onPress: () => {
+            captureActionEventsQuietly([
+              {
+                eventType: "link_open_confirmed",
+                targetType: "review_link",
+                targetId: sticker.id,
+                reviewId: review.id,
+                linkId: sticker.id,
+                sourceSurface
+              }
+            ]);
+            void openOutboundReviewLink(sticker);
+          }
         }
       ]);
-    } catch (error) {
-      Alert.alert(
-        "공유 실패",
-        error instanceof Error ? error.message : "공유를 다시 시도해주세요."
-      );
-    }
-  }, []);
-
-  const openSticker = useCallback((review: ReviewSummary, sticker: ReviewLinkSticker) => {
-    Alert.alert("상품 링크 열기", `${sticker.merchantName}\n${sticker.domain}`, [
-      { text: "취소", style: "cancel" },
-      {
-        text: "열기",
-        onPress: () => {
-          captureActionEventsQuietly([
-            {
-              eventType: "link_open_confirmed",
-              targetType: "review_link",
-              targetId: sticker.id,
-              reviewId: review.id,
-              linkId: sticker.id,
-              sourceSurface: "review_detail"
-            }
-          ]);
-          void openOutboundReviewLink(sticker);
-        }
-      }
-    ]);
-  }, []);
+    },
+    [sourceSurface]
+  );
 
   const reportReview = useCallback(
     (review: ReviewSummary) => {
@@ -544,7 +589,7 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
             targetType: "review",
             targetId: reportingReview.id,
             reviewId: reportingReview.id,
-            sourceSurface: "review_detail",
+            sourceSurface,
             payload: { reasonCode }
           }
         ]);
@@ -559,7 +604,7 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
         setReportSubmitting(false);
       }
     },
-    [reportSubmitting, reportingReview]
+    [reportSubmitting, reportingReview, sourceSurface]
   );
 
   if (selectedSummaryNeedsDetail) {
@@ -603,7 +648,10 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.semantic.color.background }}>
+    <Animated.View
+      entering={ZoomIn.duration(240).reduceMotion(ReduceMotion.System)}
+      style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
+    >
       <FlashList
         key={`review-detail-${feedContext?.key ?? reviewId ?? "feed"}`}
         data={data}
@@ -662,6 +710,7 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
                 reviewId={item.id}
                 reviewActive={item.id === activeReviewId && appIsActive}
                 sourceSurface={sourceSurface}
+                bottomInset={insets.bottom}
                 videoSeekActive={videoSeekActive}
                 onReveal={() => reveal(item)}
                 onSelect={(index, action) => setReviewMediaIndex(item.id, index, action)}
@@ -962,7 +1011,7 @@ export function ReviewDetailViewer({ reviewId, feedKey }: ReviewDetailViewerProp
           </ScrollView>
         </View>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -988,6 +1037,7 @@ function ReviewMediaCarousel({
   reviewId,
   reviewActive,
   sourceSurface,
+  bottomInset,
   videoSeekActive,
   onReveal,
   onSelect,
@@ -1000,6 +1050,7 @@ function ReviewMediaCarousel({
   reviewId: string;
   reviewActive: boolean;
   sourceSurface: string;
+  bottomInset: number;
   videoSeekActive: boolean;
   onReveal: () => void;
   onSelect: (index: number, action: "swipe" | "select") => void;
@@ -1066,6 +1117,7 @@ function ReviewMediaCarousel({
                 active={reviewActive && index === activeIndex}
                 reviewId={reviewId}
                 sourceSurface={sourceSurface}
+                bottomInset={bottomInset}
                 blockedScrollGesture={mediaScrollGesture}
                 onSeekActiveChange={onVideoSeekActiveChange}
               />
@@ -1084,6 +1136,7 @@ function ReviewMediaSurface({
   active = true,
   reviewId,
   sourceSurface,
+  bottomInset,
   blockedScrollGesture,
   onSeekActiveChange
 }: {
@@ -1093,6 +1146,7 @@ function ReviewMediaSurface({
   active?: boolean;
   reviewId: string;
   sourceSurface: string;
+  bottomInset: number;
   blockedScrollGesture: GestureType;
   onSeekActiveChange: (active: boolean) => void;
 }) {
@@ -1108,6 +1162,7 @@ function ReviewMediaSurface({
         playing={playing}
         reviewId={reviewId}
         sourceSurface={sourceSurface}
+        bottomInset={bottomInset}
         blockedScrollGesture={blockedScrollGesture}
         onSeekActiveChange={onSeekActiveChange}
       />
@@ -1142,6 +1197,7 @@ function ReviewVideoSurface({
   playing,
   reviewId,
   sourceSurface,
+  bottomInset,
   blockedScrollGesture,
   onSeekActiveChange
 }: {
@@ -1150,6 +1206,7 @@ function ReviewVideoSurface({
   playing: boolean;
   reviewId: string;
   sourceSurface: string;
+  bottomInset: number;
   blockedScrollGesture: GestureType;
   onSeekActiveChange: (active: boolean) => void;
 }) {
@@ -1249,6 +1306,7 @@ function ReviewVideoSurface({
         currentTime={currentTime}
         duration={Math.max(duration, player.duration)}
         onSeek={seekToProgress}
+        bottomInset={bottomInset}
         blockedScrollGesture={blockedScrollGesture}
         onSeekActiveChange={onSeekActiveChange}
       />
@@ -1260,12 +1318,14 @@ function VideoSeekBar({
   currentTime,
   duration,
   onSeek,
+  bottomInset,
   blockedScrollGesture,
   onSeekActiveChange
 }: {
   currentTime: number;
   duration: number;
   onSeek: (progress: number) => void;
+  bottomInset: number;
   blockedScrollGesture: GestureType;
   onSeekActiveChange: (active: boolean) => void;
 }) {
@@ -1320,7 +1380,7 @@ function VideoSeekBar({
           onSeek((currentTime + offset) / duration);
         }}
         onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-        style={styles.videoSeekTouchTarget}
+        style={[styles.videoSeekTouchTarget, { bottom: bottomInset }]}
       >
         <View style={styles.videoSeekTrack}>
           <View

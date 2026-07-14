@@ -1,4 +1,5 @@
 export {
+  useDeleteMagazine,
   useFillMagazineSlot,
   usePublishMagazine,
   useRegenerateMagazineBlock,

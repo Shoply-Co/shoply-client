@@ -23,12 +23,12 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="home" options={{ title: "홈" }} />
-      <Tabs.Screen name="shoply" options={{ title: "쇼플리" }} />
+      <Tabs.Screen name="search" options={{ title: "검색" }} />
       <Tabs.Screen
         name="create"
         options={{ title: "리뷰등록", tabBarStyle: { display: "none" } }}
       />
-      <Tabs.Screen name="search" options={{ title: "검색" }} />
+      <Tabs.Screen name="shoply" options={{ title: "쇼플리" }} />
       <Tabs.Screen name="my" options={{ title: "개인정보" }} />
       <Tabs.Screen
         name="shopi"

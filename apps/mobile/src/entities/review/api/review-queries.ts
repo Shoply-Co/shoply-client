@@ -2,6 +2,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient
 } from "@tanstack/react-query";
@@ -15,7 +16,11 @@ import type {
   ReviewReport,
   SearchReviewListEnvelope
 } from "@/shared/api/generated/shoply";
-import { extractHomeReviewSummaries, mapApiReviewDetail, mapApiReviewSummary } from "./review-mappers";
+import {
+  extractHomeReviewSummaries,
+  mapApiReviewDetail,
+  mapApiReviewSummary
+} from "./review-mappers";
 import type { ReviewSummary } from "../model/types";
 
 export interface SearchReviewFilters {
@@ -73,7 +78,13 @@ export function useHomeReviews(
   options: ReviewListQueryOptions = {}
 ) {
   const query = useInfiniteQuery({
-    queryKey: ["home", "reviews", categoryId ?? "all", refreshSeed ?? "stable", userId ?? "anonymous"],
+    queryKey: [
+      "home",
+      "reviews",
+      categoryId ?? "all",
+      refreshSeed ?? "stable",
+      userId ?? "anonymous"
+    ],
     enabled: options.enabled ?? true,
     placeholderData: keepPreviousData,
     initialPageParam: { cursor: null } as HomeReviewsPageParam,
@@ -83,12 +94,16 @@ export function useHomeReviews(
       if (refreshSeed) params.set("refreshSeed", refreshSeed);
       if (pageParam.cursor) params.set("cursor", pageParam.cursor);
 
-      const homeEnvelope = await apiRequest<HomeEnvelope | ApiEnvelope<HomeEnvelope>>(`/home?${params.toString()}`, {
-        unwrapEnvelope: false
-      });
+      const homeEnvelope = await apiRequest<HomeEnvelope | ApiEnvelope<HomeEnvelope>>(
+        `/home?${params.toString()}`,
+        {
+          unwrapEnvelope: false
+        }
+      );
       const home = unwrapResponseEnvelope(homeEnvelope);
       const payload = home.data ?? (home as unknown as HomeEnvelopeData);
-      const payloadPage = (payload as HomeEnvelopeData & { page?: { nextCursor?: string | null } }).page;
+      const payloadPage = (payload as HomeEnvelopeData & { page?: { nextCursor?: string | null } })
+        .page;
 
       return {
         reviews: mediaReviews(extractHomeReviewSummaries(payload)),
@@ -126,7 +141,8 @@ export function useSearchReviews(
     enabled: options.enabled ?? true,
     placeholderData: keepPreviousData,
     initialPageParam: { cursor: null } as SearchReviewsPageParam,
-    queryFn: ({ pageParam }) => fetchSearchReviewsPage(filters, refreshSeed, pageParam, { mediaOnly }),
+    queryFn: ({ pageParam }) =>
+      fetchSearchReviewsPage(filters, refreshSeed, pageParam, { mediaOnly }),
     getNextPageParam: (lastPage: SearchReviewsPage) => {
       if (!lastPage.nextCursor) return undefined;
       return {
@@ -136,13 +152,10 @@ export function useSearchReviews(
     retry: 1
   });
 
-  const reviews = useMemo(
-    () => {
-      const pageReviews = uniqueReviews(query.data?.pages.flatMap((page) => page.reviews) ?? []);
-      return mediaOnly ? mediaReviews(pageReviews) : pageReviews;
-    },
-    [mediaOnly, query.data?.pages]
-  );
+  const reviews = useMemo(() => {
+    const pageReviews = uniqueReviews(query.data?.pages.flatMap((page) => page.reviews) ?? []);
+    return mediaOnly ? mediaReviews(pageReviews) : pageReviews;
+  }, [mediaOnly, query.data?.pages]);
 
   return {
     ...query,
@@ -155,7 +168,8 @@ export function prefetchInitialSearchReviews(client: QueryClient, userId?: strin
   return client.prefetchInfiniteQuery({
     queryKey: searchReviewsQueryKey(filters, DEFAULT_SEARCH_REVIEWS_REFRESH_SEED),
     initialPageParam: { cursor: null } as SearchReviewsPageParam,
-    queryFn: ({ pageParam }) => fetchSearchReviewsPage(filters, DEFAULT_SEARCH_REVIEWS_REFRESH_SEED, pageParam),
+    queryFn: ({ pageParam }) =>
+      fetchSearchReviewsPage(filters, DEFAULT_SEARCH_REVIEWS_REFRESH_SEED, pageParam),
     getNextPageParam: (lastPage: SearchReviewsPage) => {
       if (!lastPage.nextCursor) return undefined;
       return {
@@ -175,7 +189,11 @@ export function initialSearchReviewFilters(userId?: string | null): SearchReview
   };
 }
 
-function searchReviewsQueryKey(filters: SearchReviewFilters, refreshSeed?: string, mediaOnly = false) {
+function searchReviewsQueryKey(
+  filters: SearchReviewFilters,
+  refreshSeed?: string,
+  mediaOnly = false
+) {
   return [
     "search",
     "reviews",
@@ -195,19 +213,25 @@ async function fetchSearchReviewsPage(
   const params = new URLSearchParams({ limit: String(REVIEW_LIST_PAGE_LIMIT) });
   if (normalizedFilters.query) params.set("q", normalizedFilters.query);
   if (normalizedFilters.categoryId) params.set("categoryId", normalizedFilters.categoryId);
-  if (normalizedFilters.priceMin !== null) params.set("priceMin", String(normalizedFilters.priceMin));
-  if (normalizedFilters.priceMax !== null) params.set("priceMax", String(normalizedFilters.priceMax));
+  if (normalizedFilters.priceMin !== null)
+    params.set("priceMin", String(normalizedFilters.priceMin));
+  if (normalizedFilters.priceMax !== null)
+    params.set("priceMax", String(normalizedFilters.priceMax));
   for (const facetFilter of normalizedFilters.facetFilters) {
     params.append("facetFilters", `${facetFilter.key}:${facetFilter.value}`);
   }
   if (refreshSeed) params.set("refreshSeed", refreshSeed);
   if (pageParam.cursor) params.set("cursor", pageParam.cursor);
 
-  const resultEnvelope = await apiRequest<SearchReviewListEnvelope | ApiEnvelope<SearchReviewListEnvelope>>(`/search/reviews?${params.toString()}`, {
+  const resultEnvelope = await apiRequest<
+    SearchReviewListEnvelope | ApiEnvelope<SearchReviewListEnvelope>
+  >(`/search/reviews?${params.toString()}`, {
     unwrapEnvelope: false
   });
   const result = unwrapPagedReviewList(resultEnvelope);
-  const mappedReviews = (result.data ?? []).map((review, index) => mapApiReviewSummary(review, index));
+  const mappedReviews = (result.data ?? []).map((review, index) =>
+    mapApiReviewSummary(review, index)
+  );
   return {
     reviews: options.mediaOnly ? mediaReviews(mappedReviews) : mappedReviews,
     nextCursor: result.page?.nextCursor ?? null
@@ -230,10 +254,14 @@ function normalizeFacetFilters(filters: SearchReviewFacetFilter[]) {
   return [...filters]
     .filter((filter) => filter.key.trim() && filter.value.trim())
     .map((filter) => ({ key: filter.key.trim(), value: filter.value.trim() }))
-    .sort((left, right) => left.key.localeCompare(right.key) || left.value.localeCompare(right.value));
+    .sort(
+      (left, right) => left.key.localeCompare(right.key) || left.value.localeCompare(right.value)
+    );
 }
 
-function unwrapPagedReviewList(value: SearchReviewListEnvelope | ApiEnvelope<SearchReviewListEnvelope>): SearchReviewListEnvelope {
+function unwrapPagedReviewList(
+  value: SearchReviewListEnvelope | ApiEnvelope<SearchReviewListEnvelope>
+): SearchReviewListEnvelope {
   if (Array.isArray(value)) {
     return { data: value };
   }
@@ -241,7 +269,9 @@ function unwrapPagedReviewList(value: SearchReviewListEnvelope | ApiEnvelope<Sea
     const record = value as unknown as Record<string, unknown>;
     if ("page" in record || "searchMeta" in record) {
       return {
-        data: Array.isArray(record["data"]) ? (record["data"] as SearchReviewListEnvelope["data"]) : [],
+        data: Array.isArray(record["data"])
+          ? (record["data"] as SearchReviewListEnvelope["data"])
+          : [],
         page: record["page"] as SearchReviewListEnvelope["page"],
         searchMeta: record["searchMeta"] as SearchReviewListEnvelope["searchMeta"]
       };
@@ -261,14 +291,36 @@ function unwrapResponseEnvelope<T>(value: T | ApiEnvelope<T>): T {
 export function useReviewDetail(reviewId?: string) {
   return useQuery({
     queryKey: ["review", "detail", reviewId],
-    queryFn: async () => {
-      if (!reviewId) throw new Error("reviewId is required");
-      const result = await apiRequest<ApiReviewDetail>(`/reviews/${reviewId}`, { auth: false });
-      return mapApiReviewDetail(result);
-    },
+    queryFn: () => fetchReviewDetail(reviewId),
     enabled: Boolean(reviewId),
     retry: 1
   });
+}
+
+export function useReviewDetails(reviewIds: string[], enabled = true) {
+  const normalizedReviewIds = useMemo(() => [...new Set(reviewIds.filter(Boolean))], [reviewIds]);
+
+  return useQueries({
+    queries: normalizedReviewIds.map((reviewId) => ({
+      queryKey: ["review", "detail", reviewId],
+      queryFn: () => fetchReviewDetail(reviewId),
+      enabled,
+      retry: 1
+    })),
+    combine: (results) => ({
+      data: results.flatMap((result) => (result.data ? [result.data] : [])),
+      isError: results.length > 0 && results.every((result) => result.isError),
+      isFetching: results.some((result) => result.isFetching),
+      isPending: enabled && results.some((result) => result.isPending),
+      refetch: () => Promise.all(results.map((result) => result.refetch()))
+    })
+  });
+}
+
+async function fetchReviewDetail(reviewId?: string) {
+  if (!reviewId) throw new Error("reviewId is required");
+  const result = await apiRequest<ApiReviewDetail>(`/reviews/${reviewId}`, { auth: false });
+  return mapApiReviewDetail(result);
 }
 
 export function useReviewActivityState(enabled: boolean) {
@@ -277,9 +329,10 @@ export function useReviewActivityState(enabled: boolean) {
     enabled,
     queryFn: async () => {
       const response = await apiRequest<
-        Array<{ id: string; _activityTypes?: string[] }> | { data?: Array<{ id: string; _activityTypes?: string[] }> }
+        | Array<{ id: string; _activityTypes?: string[] }>
+        | { data?: Array<{ id: string; _activityTypes?: string[] }> }
       >("/users/me/activity/reviews?limit=100");
-      const reviews = Array.isArray(response) ? response : response.data ?? [];
+      const reviews = Array.isArray(response) ? response : (response.data ?? []);
       const activity: Record<string, { liked?: boolean; saved?: boolean }> = {};
 
       for (const review of reviews) {

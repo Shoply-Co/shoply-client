@@ -1,6 +1,5 @@
 import { Image } from "expo-image";
-import { router } from "expo-router";
-import { Edit3, Plus, RefreshCw, Scan } from "lucide-react-native";
+import { Edit3, Plus, RefreshCw } from "lucide-react-native";
 import { ReactNode, useMemo } from "react";
 import { Dimensions, Pressable, StyleSheet, View } from "react-native";
 import Animated, {
@@ -12,6 +11,7 @@ import Animated, {
   useReducedMotion,
   useSharedValue
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, ShoplyText, useShoplyTheme } from "@shoply/design-system";
 import type {
   MagazineDeal,
@@ -24,6 +24,7 @@ import type {
 import { DisclosureBadge } from "@/entities/review";
 import type { DisclosureState } from "@/entities/review/model/types";
 import { ShoplySMonogram, ShoplyWordmark } from "@/shared/ui/brand";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const WORDMARK_DISTANCE = SCREEN_WIDTH * 0.25;
@@ -34,8 +35,8 @@ interface MagazineIssueViewerProps {
   onEditBlock?: (block: MagazineEditorialBlock) => void;
   onRegenerateBlock?: (block: MagazineEditorialBlock) => void;
   regeneratingBlockId?: string | null;
-  onChangeCrop?: (itemId: string, crop: { x: number; y: number; zoom: number }) => void;
   onSelectReview?: (itemId: string) => void;
+  onOpenReview?: (reviewId: string) => void;
   onMoveItem?: (sectionId: string, itemId: string, direction: -1 | 1) => void;
   onRemoveItem?: (itemId: string) => void;
   header?: ReactNode;
@@ -48,14 +49,15 @@ export function MagazineIssueViewer({
   onEditBlock,
   onRegenerateBlock,
   regeneratingBlockId,
-  onChangeCrop,
   onSelectReview,
+  onOpenReview,
   onMoveItem,
   onRemoveItem,
   header,
   footer
 }: MagazineIssueViewerProps) {
   const theme = useShoplyTheme();
+  const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler((event) => {
     scrollY.value = event.contentOffset.y;
@@ -73,13 +75,21 @@ export function MagazineIssueViewer({
       accessibilityLabel={`${issue.issueLabel} 매거진`}
       contentContainerStyle={[
         styles.scrollContent,
-        { backgroundColor: theme.semantic.color.background }
+        {
+          backgroundColor: theme.semantic.color.background,
+          paddingBottom: Math.max(insets.bottom + 8, editing ? 12 : 28)
+        }
       ]}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
+      stickyHeaderIndices={header ? [0] : undefined}
     >
-      {header}
+      {header ? (
+        <AdaptiveStickyHeader scrollY={scrollY} style={styles.stickyHeader}>
+          {header}
+        </AdaptiveStickyHeader>
+      ) : null}
       <MagazineCover issue={issue} imageUrl={coverImage} />
       <View style={styles.disclosureRow}>
         <ShoplyText variant="caption" color="textMuted">
@@ -118,8 +128,8 @@ export function MagazineIssueViewer({
               onEditBlock={onEditBlock}
               onRegenerateBlock={onRegenerateBlock}
               regeneratingBlockId={regeneratingBlockId}
-              onChangeCrop={onChangeCrop}
               onSelectReview={onSelectReview}
+              onOpenReview={onOpenReview}
               onMoveItem={onMoveItem}
               onRemoveItem={onRemoveItem}
             />
@@ -295,8 +305,8 @@ function MagazineSectionView({
   onEditBlock,
   onRegenerateBlock,
   regeneratingBlockId,
-  onChangeCrop,
   onSelectReview,
+  onOpenReview,
   onMoveItem,
   onRemoveItem
 }: {
@@ -309,8 +319,8 @@ function MagazineSectionView({
   onEditBlock?: (block: MagazineEditorialBlock) => void;
   onRegenerateBlock?: (block: MagazineEditorialBlock) => void;
   regeneratingBlockId?: string | null;
-  onChangeCrop?: (itemId: string, crop: { x: number; y: number; zoom: number }) => void;
   onSelectReview?: (itemId: string) => void;
+  onOpenReview?: (reviewId: string) => void;
   onMoveItem?: (sectionId: string, itemId: string, direction: -1 | 1) => void;
   onRemoveItem?: (itemId: string) => void;
 }) {
@@ -385,8 +395,8 @@ function MagazineSectionView({
             onEditBlock={onEditBlock}
             onRegenerateBlock={onRegenerateBlock}
             regeneratingBlockId={regeneratingBlockId}
-            onChangeCrop={onChangeCrop}
             onSelectReview={onSelectReview}
+            onOpenReview={onOpenReview}
             onMoveItem={onMoveItem}
             onRemoveItem={onRemoveItem}
             sectionId={section.id}
@@ -416,8 +426,8 @@ function MagazineItemCard({
   onEditBlock,
   onRegenerateBlock,
   regeneratingBlockId,
-  onChangeCrop,
   onSelectReview,
+  onOpenReview,
   onMoveItem,
   onRemoveItem,
   sectionId
@@ -430,8 +440,8 @@ function MagazineItemCard({
   onEditBlock?: (block: MagazineEditorialBlock) => void;
   onRegenerateBlock?: (block: MagazineEditorialBlock) => void;
   regeneratingBlockId?: string | null;
-  onChangeCrop?: (itemId: string, crop: { x: number; y: number; zoom: number }) => void;
   onSelectReview?: (itemId: string) => void;
+  onOpenReview?: (reviewId: string) => void;
   onMoveItem?: (sectionId: string, itemId: string, direction: -1 | 1) => void;
   onRemoveItem?: (itemId: string) => void;
   sectionId: string;
@@ -522,7 +532,12 @@ function MagazineItemCard({
 
   return (
     <View style={cardStyle}>
-      <View
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${facts?.productName ?? "잡지 속"} 리뷰 상세 보기`}
+        accessibilityState={{ disabled: canEdit || !item.reviewId || !onOpenReview }}
+        disabled={canEdit || !item.reviewId || !onOpenReview}
+        onPress={() => item.reviewId && onOpenReview?.(item.reviewId)}
         style={[
           photoFrameStyle,
           {
@@ -551,7 +566,7 @@ function MagazineItemCard({
             </ShoplyText>
           </View>
         ) : null}
-      </View>
+      </Pressable>
 
       <View
         style={[
@@ -588,20 +603,6 @@ function MagazineItemCard({
               icon={<RefreshCw size={14} color={theme.semantic.color.primary} />}
               label="리뷰 변경"
               onPress={() => onSelectReview?.(item.id)}
-              size="sm"
-              variant="tertiary"
-            />
-            <Button
-              accessibilityLabel="사진 강조 위치 변경"
-              icon={<Scan size={14} color={theme.semantic.color.primary} />}
-              label="초점"
-              onPress={() =>
-                onChangeCrop?.(item.id, {
-                  x: cropX,
-                  y: cropY < 0.35 ? 0.5 : cropY < 0.65 ? 0.8 : 0.2,
-                  zoom: cropZoom
-                })
-              }
               size="sm"
               variant="tertiary"
             />
@@ -691,11 +692,8 @@ function MagazineItemCard({
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`${facts?.authorNickname ?? "작성자"} 리뷰 원문 보기`}
-          disabled={!item.reviewId}
-          onPress={() =>
-            item.reviewId &&
-            router.push({ pathname: "/review/[reviewId]", params: { reviewId: item.reviewId } })
-          }
+          disabled={!item.reviewId || !onOpenReview}
+          onPress={() => item.reviewId && onOpenReview?.(item.reviewId)}
           style={styles.photoCredit}
         >
           <ShoplyText variant="caption" color="textMuted">
@@ -932,7 +930,10 @@ const styles = StyleSheet.create({
   photoFallback: { alignItems: "center", flex: 1, justifyContent: "center" },
   photoFrame: { alignSelf: "stretch", flexShrink: 0, overflow: "hidden", width: "100%" },
   priceRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  scrollContent: { paddingBottom: 120 },
+  scrollContent: {},
+  stickyHeader: {
+    paddingVertical: 2
+  },
   section: { overflow: "hidden", paddingHorizontal: 20, paddingVertical: 18, position: "relative" },
   sectionFolio: {
     alignItems: "center",

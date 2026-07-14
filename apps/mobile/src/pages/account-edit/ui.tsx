@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import { ArrowLeft } from "lucide-react-native";
+import { ArrowLeft, Camera } from "lucide-react-native";
 import { ReactNode, useState } from "react";
 import {
   Alert,
@@ -11,11 +11,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   TextInput,
   View
 } from "react-native";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, ShoplyText, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
@@ -24,45 +24,11 @@ import {
   accountOverviewQueryKey,
   useSuspenseAccountOverview
 } from "@/entities/user";
+import { uploadProfileImage, type ProfileImageUploadInput } from "@/features/profile-image-upload";
 import { apiRequest } from "@/shared/api/client";
 import { goBackOrReplace } from "@/shared/lib/navigation";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 import type { UserProfile } from "@/shared/api/generated/shoply";
-
-interface SelectedProfileImage {
-  file?: ImagePicker.ImagePickerAsset["file"] | null;
-  uri: string;
-  fileName?: string | null;
-  mimeType?: string | null;
-}
-
-interface ProfileImageUploadResult {
-  publicUrl: string;
-}
-
-type ProfileImageMimeType =
-  | "image/jpeg"
-  | "image/png"
-  | "image/webp"
-  | "image/gif"
-  | "image/heic"
-  | "image/heic-sequence"
-  | "image/heif"
-  | "image/heif-sequence";
-
-const PROFILE_IMAGE_MIME_BY_EXTENSION: Record<string, ProfileImageMimeType> = {
-  gif: "image/gif",
-  heic: "image/heic",
-  heif: "image/heif",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp"
-};
-const PROFILE_IMAGE_MIME_TYPES = new Set<ProfileImageMimeType>([
-  ...Object.values(PROFILE_IMAGE_MIME_BY_EXTENSION),
-  "image/heic-sequence",
-  "image/heif-sequence"
-]);
 
 export function AccountEditPage() {
   const { user } = useSession();
@@ -104,7 +70,7 @@ function AccountEditForm() {
   const [profileImageUrl, setProfileImageUrl] = useState(
     () => account.profile?.profileImageUrl ?? ""
   );
-  const [selectedImage, setSelectedImage] = useState<SelectedProfileImage | null>(null);
+  const [selectedImage, setSelectedImage] = useState<ProfileImageUploadInput | null>(null);
   const [saving, setSaving] = useState(false);
 
   const pickProfileImage = async () => {
@@ -133,19 +99,6 @@ function AccountEditForm() {
     });
     setProfileImageUrl(asset.uri);
     void Haptics.selectionAsync();
-  };
-
-  const uploadProfileImage = async (image: SelectedProfileImage) => {
-    const formData = new FormData();
-    const fileName = resolveProfileImageFileName(image);
-    const mimeType = resolveProfileImageMimeType(image, fileName);
-    appendProfileImageFile(formData, image, fileName, mimeType);
-    formData.append("fileName", fileName);
-
-    return apiRequest<ProfileImageUploadResult>("/uploads/profile-images", {
-      method: "POST",
-      body: formData as RequestInit["body"]
-    });
   };
 
   const saveProfile = async () => {
@@ -216,11 +169,19 @@ function AccountEditForm() {
               style={StyleSheet.absoluteFill}
               contentFit="cover"
             />
-          ) : null}
+          ) : (
+            <Camera size={30} color={theme.semantic.color.primary} />
+          )}
+          <View style={[styles.avatarEditBadge, { backgroundColor: theme.semantic.color.primary }]}>
+            <Camera size={14} color={theme.semantic.color.textInverse} />
+          </View>
         </Pressable>
-        <ShoplyText variant="caption" color="textMuted" align="center">
-          프로필 이미지를 선택해주세요.
-        </ShoplyText>
+        <Button
+          label={profileImageUrl ? "프로필 이미지 변경" : "프로필 이미지 등록"}
+          size="sm"
+          variant="secondary"
+          onPress={pickProfileImage}
+        />
       </View>
 
       <View style={styles.fieldGroup}>
@@ -248,6 +209,10 @@ function AccountEditForm() {
 
 function AccountEditFrame({ children }: { children: ReactNode }) {
   const theme = useShoplyTheme();
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
 
   return (
     <SafeAreaView
@@ -258,17 +223,22 @@ function AccountEditFrame({ children }: { children: ReactNode }) {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView
+        <Animated.ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[0]}
         >
-          <View style={styles.topBar}>
-            <TextBackButton />
-            <ShoplyText variant="titleLg">내 계정정보 설정</ShoplyText>
-          </View>
+          <AdaptiveStickyHeader scrollY={scrollY} style={styles.stickyHeader}>
+            <View style={styles.topBar}>
+              <TextBackButton />
+              <ShoplyText variant="titleLg">내 계정정보 설정</ShoplyText>
+            </View>
+          </AdaptiveStickyHeader>
           {children}
-        </ScrollView>
+        </Animated.ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -310,100 +280,6 @@ function StatePanel({
   );
 }
 
-function resolveProfileImageFileName(image: SelectedProfileImage) {
-  const candidate = image.fileName?.trim() || image.file?.name || fileNameFromUri(image.uri);
-  const mimeType = resolveProfileImageMimeType(image, candidate);
-  const extension = extensionForProfileImageMimeType(mimeType);
-  const baseName = sanitizeProfileImageBaseName(candidate);
-
-  return `${baseName}.${extension}`;
-}
-
-function appendProfileImageFile(
-  formData: FormData,
-  image: SelectedProfileImage,
-  fileName: string,
-  mimeType: ProfileImageMimeType
-) {
-  if (Platform.OS === "web") {
-    if (!image.file) {
-      throw new Error("프로필 이미지를 다시 선택해주세요.");
-    }
-    formDataAppend(formData, "file", image.file, fileName);
-    return;
-  }
-
-  formDataAppend(formData, "file", {
-    uri: image.uri,
-    name: fileName,
-    type: mimeType
-  });
-}
-
-function formDataAppend(formData: FormData, name: string, value: unknown, fileName?: string) {
-  (
-    formData as unknown as {
-      append(fieldName: string, fieldValue: unknown, fileName?: string): void;
-    }
-  ).append(name, value, fileName);
-}
-
-function resolveProfileImageMimeType(
-  image: SelectedProfileImage,
-  fileName?: string | null
-): ProfileImageMimeType {
-  const normalized = image.mimeType?.trim().toLowerCase();
-  if (normalized === "image/jpg") return "image/jpeg";
-  if (normalized && isProfileImageMimeType(normalized)) return normalized;
-
-  const extension = fileName
-    ?.trim()
-    .toLowerCase()
-    .match(/\.([a-z0-9]+)(?:[?#].*)?$/)?.[1];
-  if (extension && PROFILE_IMAGE_MIME_BY_EXTENSION[extension]) {
-    return PROFILE_IMAGE_MIME_BY_EXTENSION[extension];
-  }
-
-  return "image/jpeg";
-}
-
-function isProfileImageMimeType(value: string): value is ProfileImageMimeType {
-  return PROFILE_IMAGE_MIME_TYPES.has(value as ProfileImageMimeType);
-}
-
-function extensionForProfileImageMimeType(mimeType: ProfileImageMimeType) {
-  return {
-    "image/gif": "gif",
-    "image/heic": "heic",
-    "image/heic-sequence": "heic",
-    "image/heif": "heif",
-    "image/heif-sequence": "heif",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp"
-  }[mimeType];
-}
-
-function fileNameFromUri(uri: string) {
-  const lastSegment = uri.split(/[?#]/)[0]?.split("/").pop() ?? "";
-  try {
-    return decodeURIComponent(lastSegment);
-  } catch {
-    return lastSegment;
-  }
-}
-
-function sanitizeProfileImageBaseName(fileName?: string | null) {
-  const baseName = fileName?.replace(/\.[^.]+$/, "") ?? "";
-  const sanitized = baseName
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-
-  return sanitized || "profile-image";
-}
-
 function TextBackButton() {
   const theme = useShoplyTheme();
   return (
@@ -428,6 +304,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
     width: 112
+  },
+  avatarEditBadge: {
+    alignItems: "center",
+    borderRadius: 999,
+    bottom: 8,
+    height: 30,
+    justifyContent: "center",
+    position: "absolute",
+    right: 8,
+    width: 30
   },
   avatarSection: {
     alignItems: "center",
@@ -465,6 +351,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 10
+  },
+  stickyHeader: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    paddingVertical: 4
   },
   iconBackButton: {
     alignItems: "center",

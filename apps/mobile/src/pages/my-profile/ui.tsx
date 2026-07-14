@@ -1,3 +1,4 @@
+import { Image as ExpoImage } from "expo-image";
 import { ReactNode, useState } from "react";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
@@ -183,11 +184,43 @@ function MyProfileAuthenticated() {
         <View
           style={[styles.accountSummary, { backgroundColor: theme.semantic.color.surfaceMuted }]}
         >
-          <View style={{ flex: 1 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="프로필 이미지 수정"
+            onPress={() => router.push("/account/edit")}
+            style={({ pressed }) => [
+              styles.profileAvatar,
+              {
+                backgroundColor: theme.semantic.color.primarySoft,
+                opacity: pressed ? 0.82 : 1
+              }
+            ]}
+          >
+            {account.profile?.profileImageUrl ? (
+              <ExpoImage
+                source={{ uri: account.profile.profileImageUrl }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+              />
+            ) : (
+              <ShoplyText variant="titleMd" color="primary">
+                {(account.profile?.nickname ?? "S").slice(0, 1).toUpperCase()}
+              </ShoplyText>
+            )}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="계정정보 수정"
+            onPress={() => router.push("/account/edit")}
+            style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.72 : 1 })}
+          >
             <ShoplyText variant="titleMd" numberOfLines={1}>
               {account.profile?.nickname ?? "Shoply 사용자"}
             </ShoplyText>
-          </View>
+            <ShoplyText variant="caption" color="textMuted">
+              사진과 닉네임을 눌러 수정할 수 있어요.
+            </ShoplyText>
+          </Pressable>
         </View>
 
         <View style={styles.menuList}>
@@ -505,6 +538,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 8,
     flexDirection: "row",
+    gap: 12,
     padding: 14
   },
   content: {
@@ -532,6 +566,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 58,
     paddingVertical: 8
+  },
+  profileAvatar: {
+    alignItems: "center",
+    borderRadius: 999,
+    height: 54,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 54
   },
   confirmBlock: {
     gap: 10

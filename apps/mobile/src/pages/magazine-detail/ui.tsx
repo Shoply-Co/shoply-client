@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
-import { ArrowLeft, BookmarkPlus, Check, Edit3, Send, X } from "lucide-react-native";
+import { ArrowLeft, BookmarkPlus, Check, Edit3, Send, Trash2, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,7 +15,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Button,
-  Chip,
   KeyboardAwareBottomSheet,
   ShoplyText,
   useShoplyTheme
@@ -29,15 +28,16 @@ import {
   type MagazineLayout
 } from "@/entities/magazine";
 import {
+  useDeleteMagazine,
   useFillMagazineSlot,
   usePublishMagazine,
   useRegenerateMagazineBlock,
   useUpdateMagazine,
-  useUpdateMagazineBlock,
-  useUpdateMagazineItems
+  useUpdateMagazineBlock
 } from "@/features/magazine-edit";
 import { useMagazineSubscription } from "@/features/magazine-subscribe";
 import { userFacingErrorMessage } from "@/shared/api/errors";
+import type { UpdateMagazineRequest } from "@/shared/api/generated/shoply";
 import { goBackOrReplace } from "@/shared/lib/navigation";
 import { ShoplySMonogram, ShoplyWordmark } from "@/shared/ui/brand";
 import { MagazineIssueViewer } from "@/widgets/magazine-issue-viewer";
@@ -46,11 +46,16 @@ const MAGAZINE_EDITORIAL_TEXT_LIMITS = {
   atelier: { caption: 44, body: 72, editorLetter: 180 },
   zine: { caption: 28, body: 44, editorLetter: 120 },
   edit: { caption: 32, body: 56, editorLetter: 150 }
-} as const satisfies Record<MagazineLayout, {
-  caption: number;
-  body: number;
-  editorLetter: number;
-}>;
+} as const satisfies Record<
+  MagazineLayout,
+  {
+    caption: number;
+    body: number;
+    editorLetter: number;
+  }
+>;
+
+const MIN_LAYOUT_TRANSITION_MS = 900;
 
 function editorialBlockLimit(issue: MagazineIssue, block: MagazineEditorialBlock | null) {
   const sectionLayout = block
@@ -69,6 +74,7 @@ export function MagazineDetailPage() {
   const theme = useShoplyTheme();
   const query = useMagazineIssue(issueId);
   const subscription = useMagazineSubscription();
+  const deleteMagazine = useDeleteMagazine();
 
   if (query.isPending) {
     return (
@@ -114,10 +120,17 @@ export function MagazineDetailPage() {
     >
       <MagazineIssueViewer
         issue={issue}
+        onOpenReview={(reviewId) =>
+          router.push({
+            pathname: "/magazine/[issueId]/review/[reviewId]" as never,
+            params: { issueId: issue.id, reviewId }
+          })
+        }
         header={
           <MagazineHeader
             issue={issue}
             subscribing={subscription.isPending}
+            deleting={deleteMagazine.isPending}
             onEdit={
               issue.isOwner && issue.issueType === "custom"
                 ? () =>
@@ -132,6 +145,34 @@ export function MagazineDetailPage() {
                 seriesId: issue.owner.userId,
                 subscribed: issue.isSubscribed
               })
+            }
+            onDelete={
+              issue.isOwner && issue.issueType === "custom"
+                ? () => {
+                    Alert.alert(
+                      "이 에디션을 삭제할까요?",
+                      "삭제한 에디션은 다시 복구할 수 없어요.",
+                      [
+                        { text: "취소", style: "cancel" },
+                        {
+                          text: "삭제",
+                          style: "destructive",
+                          onPress: async () => {
+                            try {
+                              await deleteMagazine.mutateAsync(issue.id);
+                              goBackOrReplace("/(tabs)/shoply");
+                            } catch (error) {
+                              Alert.alert(
+                                "에디션을 삭제하지 못했어요",
+                                userFacingErrorMessage(error, "잠시 후 다시 시도해주세요.")
+                              );
+                            }
+                          }
+                        }
+                      ]
+                    );
+                  }
+                : undefined
             }
           />
         }
@@ -148,12 +189,12 @@ export function MagazineEditPage() {
   const updateBlock = useUpdateMagazineBlock();
   const regenerateBlock = useRegenerateMagazineBlock();
   const fillSlot = useFillMagazineSlot();
-  const updateItems = useUpdateMagazineItems();
   const publish = usePublishMagazine();
   const [editingBlock, setEditingBlock] = useState<MagazineEditorialBlock | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [sourceSlotId, setSourceSlotId] = useState<string | null>(null);
   const [draftText, setDraftText] = useState("");
+  const [layoutTransitioning, setLayoutTransitioning] = useState(false);
   const sourceQuery = useCustomMagazineSources(sourcesOpen);
 
   useEffect(() => {
@@ -234,19 +275,6 @@ export function MagazineEditPage() {
         onRegenerateBlock={(block) =>
           regenerateBlock.mutate({ issueId: issue.id, blockId: block.id })
         }
-        onChangeCrop={(itemId, cropPayload) =>
-          updateItems.mutate({
-            issueId: issue.id,
-            items: issue.sections.flatMap((section) =>
-              section.items.map((item) => ({
-                itemId: item.id,
-                sectionId: section.id,
-                sortOrder: item.sortOrder,
-                ...(item.id === itemId ? { cropPayload } : {})
-              }))
-            )
-          })
-        }
         onSelectReview={(itemId) => {
           setSourceSlotId(itemId);
           setSourcesOpen(true);
@@ -255,8 +283,26 @@ export function MagazineEditPage() {
         footer={
           <MagazineEditorPanel
             issue={issue}
-            busy={updateMagazine.isPending || updateItems.isPending || publish.isPending}
-            onUpdate={(patch) => updateMagazine.mutate({ issueId: issue.id, patch })}
+            busy={updateMagazine.isPending || publish.isPending || layoutTransitioning}
+            onUpdate={async (patch) => {
+              const changesLayout = typeof patch.baseLayout === "string";
+              if (changesLayout) setLayoutTransitioning(true);
+              try {
+                await Promise.all([
+                  updateMagazine.mutateAsync({ issueId: issue.id, patch }),
+                  changesLayout
+                    ? new Promise<void>((resolve) => setTimeout(resolve, MIN_LAYOUT_TRANSITION_MS))
+                    : Promise.resolve()
+                ]);
+              } catch (error) {
+                Alert.alert(
+                  "잡지를 수정하지 못했어요",
+                  userFacingErrorMessage(error, "잠시 후 다시 시도해주세요.")
+                );
+              } finally {
+                if (changesLayout) setLayoutTransitioning(false);
+              }
+            }}
             onPublish={() => {
               Alert.alert(
                 "이 잡지를 발행할까요?",
@@ -270,6 +316,20 @@ export function MagazineEditPage() {
           />
         }
       />
+
+      {layoutTransitioning ? (
+        <View
+          accessibilityLabel="잡지 레이아웃 적용 중"
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.layoutLoadingOverlay,
+            { backgroundColor: theme.semantic.color.background }
+          ]}
+        >
+          <ActivityIndicator color={theme.semantic.color.primary} size="large" />
+          <ShoplyText variant="labelLg">레이아웃을 정리하고 있어요.</ShoplyText>
+        </View>
+      ) : null}
 
       <KeyboardAwareBottomSheet
         visible={Boolean(editingBlock)}
@@ -567,12 +627,16 @@ function MagazineGenerationState({ issue }: { issue: MagazineIssue }) {
 function MagazineHeader({
   issue,
   subscribing,
+  deleting,
   onEdit,
+  onDelete,
   onSubscribe
 }: {
   issue: MagazineIssue;
   subscribing: boolean;
+  deleting: boolean;
   onEdit?: () => void;
+  onDelete?: () => void;
   onSubscribe: () => void;
 }) {
   const theme = useShoplyTheme();
@@ -610,6 +674,16 @@ function MagazineHeader({
           size="sm"
         />
       ) : null}
+      {onDelete ? (
+        <Button
+          accessibilityLabel="이 에디션 삭제하기"
+          disabled={deleting}
+          icon={<Trash2 size={17} color={theme.semantic.color.danger} />}
+          onPress={onDelete}
+          size="icon"
+          variant="tertiary"
+        />
+      ) : null}
       {!issue.isOwner && issue.issueType === "custom" ? (
         <Button
           disabled={subscribing}
@@ -638,16 +712,13 @@ function MagazineEditorPanel({
 }: {
   issue: MagazineIssue;
   busy: boolean;
-  onUpdate: (patch: Record<string, unknown>) => void;
+  onUpdate: (patch: UpdateMagazineRequest) => void | Promise<void>;
   onPublish: () => void;
 }) {
   const theme = useShoplyTheme();
   const [title, setTitle] = useState(issue.revision.coverTitle ?? "");
   const [subtitle, setSubtitle] = useState(issue.revision.coverSubtitle ?? "");
   const [letter, setLetter] = useState(issue.revision.editorLetter ?? "");
-  const [focusSectionId, setFocusSectionId] = useState(
-    issue.sections.find((section) => section.layoutOverride)?.id ?? issue.sections[0]?.id ?? null
-  );
 
   return (
     <View
@@ -676,49 +747,11 @@ function MagazineEditorPanel({
             key={layout}
             layout={layout}
             selected={issue.baseLayout === layout}
+            disabled={busy}
             onPress={() => onUpdate({ baseLayout: layout })}
           />
         ))}
       </View>
-
-      <EditorLabel label="강조할 섹션 · 최대 1개" />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipRow}
-      >
-        {issue.sections.map((section) => (
-          <Chip
-            key={section.id}
-            label={section.title}
-            selected={focusSectionId === section.id}
-            onPress={() => setFocusSectionId(section.id)}
-          />
-        ))}
-      </ScrollView>
-      {focusSectionId ? (
-        <View style={styles.chipRow}>
-          {(["atelier", "zine", "edit"] as MagazineLayout[]).map((layout) => (
-            <Button
-              key={layout}
-              label={layoutName(layout)}
-              size="sm"
-              variant="secondary"
-              onPress={() =>
-                onUpdate({ sectionLayoutOverride: { sectionId: focusSectionId, layout } })
-              }
-            />
-          ))}
-          <Button
-            label="해제"
-            size="sm"
-            variant="tertiary"
-            onPress={() =>
-              onUpdate({ sectionLayoutOverride: { sectionId: focusSectionId, layout: null } })
-            }
-          />
-        </View>
-      ) : null}
 
       <EditorLabel label="표지와 에디터 레터" />
       <EditorInput label="표지 제목" maxLength={18} value={title} onChangeText={setTitle} />
@@ -775,17 +808,20 @@ function EditorLabel({ label }: { label: string }) {
 function LayoutChoice({
   layout,
   selected,
+  disabled,
   onPress
 }: {
   layout: MagazineLayout;
   selected: boolean;
+  disabled: boolean;
   onPress: () => void;
 }) {
   const theme = useShoplyTheme();
   return (
     <Pressable
       accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ checked: selected, disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.layoutChoice,
@@ -880,7 +916,6 @@ function layoutName(layout: MagazineLayout) {
 }
 
 const styles = StyleSheet.create({
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
   draftStamp: {
     alignItems: "center",
     borderWidth: 1,
@@ -889,7 +924,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9
   },
   editorHeading: { alignItems: "center", flexDirection: "row", gap: 12 },
-  editorPanel: { borderTopWidth: 4, gap: 13, marginTop: 42, padding: 20 },
+  editorPanel: {
+    borderTopWidth: 4,
+    gap: 13,
+    marginTop: 42,
+    paddingBottom: 8,
+    paddingHorizontal: 20,
+    paddingTop: 20
+  },
   editorTitle: {
     fontFamily: "Georgia",
     fontSize: 28,
@@ -941,6 +983,18 @@ const styles = StyleSheet.create({
     padding: 8
   },
   layoutChoices: { flexDirection: "row", gap: 8 },
+  layoutLoadingOverlay: {
+    alignItems: "center",
+    bottom: 0,
+    gap: 12,
+    justifyContent: "center",
+    left: 0,
+    opacity: 0.96,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    zIndex: 30
+  },
   layoutMiniature: {
     flexDirection: "row",
     flexWrap: "wrap",

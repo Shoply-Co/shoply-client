@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import { ArrowLeft, Check } from "lucide-react-native";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, View } from "react-native";
+import Animated, { useAnimatedScrollHandler, useSharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, ShoplyText, Skeleton, useShoplyTheme } from "@shoply/design-system";
 import { useSession } from "@/app/providers/session-provider";
@@ -14,6 +15,7 @@ import {
 } from "@/entities/policy";
 import { queryClient } from "@/shared/api/query-client";
 import { goBackOrReplace } from "@/shared/lib/navigation";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 import type { PolicyVersion } from "@/shared/api/generated/shoply";
 
 export function PolicyConsentsPage() {
@@ -22,6 +24,10 @@ export function PolicyConsentsPage() {
   const { data, isFetching, isError, refetch } = usePolicyConsentState(Boolean(user));
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((event) => {
+    scrollY.value = event.contentOffset.y;
+  });
 
   const policies = useMemo(
     () =>
@@ -101,20 +107,28 @@ export function PolicyConsentsPage() {
       style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
       edges={["top"]}
     >
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.topBar}>
-            {!consentMode ? <TextBackButton /> : null}
-            <View style={{ flex: 1 }}>
-              <ShoplyText variant="titleLg">약관 동의</ShoplyText>
-              <ShoplyText variant="bodyMd" color="textMuted">
-                {consentMode
-                  ? "필수 항목을 모두 체크하면 다음으로 갈 수 있어요."
-                  : "약관 내용을 확인할 수 있어요."}
-              </ShoplyText>
+      <Animated.ScrollView
+        contentContainerStyle={styles.content}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        stickyHeaderIndices={[0]}
+      >
+        <AdaptiveStickyHeader scrollY={scrollY} style={styles.stickyHeader}>
+          <View style={styles.header}>
+            <View style={styles.topBar}>
+              {!consentMode ? <TextBackButton /> : null}
+              <View style={{ flex: 1 }}>
+                <ShoplyText variant="titleLg">약관 동의</ShoplyText>
+                <ShoplyText variant="bodyMd" color="textMuted">
+                  {consentMode
+                    ? "필수 항목을 모두 체크하면 다음으로 갈 수 있어요."
+                    : "약관 내용을 확인할 수 있어요."}
+                </ShoplyText>
+              </View>
             </View>
           </View>
-        </View>
+        </AdaptiveStickyHeader>
 
         <View style={styles.policyList}>
           {isFetching && !visiblePolicies.length ? (
@@ -141,7 +155,7 @@ export function PolicyConsentsPage() {
             }}
           />
         ) : null}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {consentMode ? (
         <View
@@ -329,6 +343,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 10
+  },
+  stickyHeader: {
+    marginHorizontal: -18,
+    paddingHorizontal: 18,
+    paddingVertical: 4
   },
   iconBackButton: {
     alignItems: "center",

@@ -46,7 +46,7 @@ export function usePublicProfileMagazines(userId?: string, enabled = true) {
 export function useSubscribedMagazines() {
   return useQuery({
     queryKey: magazineKeys.subscriptions(),
-    queryFn: () => apiRequest<MagazineSummary[]>("/magazines/subscriptions?limit=20"),
+    queryFn: () => apiRequest<MagazineSummary[]>("/magazines/subscriptions?limit=5"),
     staleTime: 2 * 60 * 1000,
     retry: 1
   });
@@ -55,7 +55,7 @@ export function useSubscribedMagazines() {
 export function useDiscoverMagazines() {
   return useQuery({
     queryKey: magazineKeys.discover(),
-    queryFn: () => apiRequest<MagazineSummary[]>("/magazines/discover?limit=30"),
+    queryFn: () => apiRequest<MagazineSummary[]>("/magazines/discover?limit=5"),
     staleTime: 2 * 60 * 1000,
     retry: 1
   });

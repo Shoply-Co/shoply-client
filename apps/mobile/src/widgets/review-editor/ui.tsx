@@ -79,12 +79,14 @@ import type {
   BrandIdentityCandidate,
   MerchantIdentityCandidate
 } from "@/shared/api/generated/shoply";
+import { AdaptiveStickyHeader } from "@/shared/ui/adaptive-sticky-header";
 import { LinkStickerCanvas, type MediaCanvasTransform } from "@/widgets/link-sticker-canvas";
 import { Image as ExpoImage } from "expo-image";
 import Animated, {
   FadeIn,
   FadeInDown,
   FadeInUp,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSpring
@@ -612,6 +614,10 @@ function getReviewBodyExample(category?: CategoryOption | null) {
 export function ReviewEditor() {
   const theme = useShoplyTheme();
   const insets = useSafeAreaInsets();
+  const detailsScrollY = useSharedValue(0);
+  const detailsScrollHandler = useAnimatedScrollHandler((event) => {
+    detailsScrollY.value = event.contentOffset.y;
+  });
   const { user } = useSession();
   const cameraRef = useRef<CameraView>(null);
   const recordingStartedAtRef = useRef<number | null>(null);
@@ -1820,7 +1826,7 @@ export function ReviewEditor() {
         style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView
+        <Animated.ScrollView
           contentContainerStyle={[
             styles.content,
             {
@@ -1829,22 +1835,29 @@ export function ReviewEditor() {
             }
           ]}
           keyboardShouldPersistTaps="handled"
+          onScroll={detailsScrollHandler}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
+          stickyHeaderIndices={[0]}
         >
-          <View style={styles.detailsHeader}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="리뷰 등록 이전 화면으로 돌아가기"
-              hitSlop={10}
-              onPress={handleBackPress}
-              style={({ pressed }) => [styles.detailsBackButton, { opacity: pressed ? 0.68 : 1 }]}
-            >
-              <ChevronLeft size={24} color={theme.semantic.color.text} />
-            </Pressable>
-            <View style={styles.detailsHeaderCopy}>
-              <ShoplyText variant="titleLg">리뷰 등록</ShoplyText>
+          <AdaptiveStickyHeader scrollY={detailsScrollY} style={styles.detailsStickyHeader}>
+            <View style={styles.detailsHeader}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="리뷰 등록 이전 화면으로 돌아가기"
+                hitSlop={10}
+                onPress={handleBackPress}
+                style={({ pressed }) => [styles.detailsBackButton, { opacity: pressed ? 0.68 : 1 }]}
+              >
+                <ChevronLeft size={24} color={theme.semantic.color.text} />
+              </Pressable>
+              <View style={styles.detailsHeaderCopy}>
+                <ShoplyText variant="titleLg">리뷰 등록</ShoplyText>
+              </View>
             </View>
-          </View>
+          </AdaptiveStickyHeader>
+
+          <ReviewDetailsIntro mediaItems={mediaItems} />
 
           <DetailsStep
             control={control}
@@ -1899,7 +1912,7 @@ export function ReviewEditor() {
               style={{ flex: 1 }}
             />
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
       </KeyboardAvoidingView>
       <PostPublishPurchaseProofSheet
         visible={Boolean(publishedReview)}
@@ -2082,7 +2095,7 @@ function MediaEditorStep({
               onEditSticker={openCanvasStickerEditor}
               onChangeSticker={updateLink}
               onChangeMediaTransform={updateActiveMediaTransform}
-              onSwipeMedia={turnActiveMedia}
+              onSwipeMedia={selectedLinkId ? undefined : turnActiveMedia}
             />
             {activeMedia.mediaType === "video" ? (
               <Pressable
@@ -2276,7 +2289,7 @@ function CameraControls({
           onPress={pickMedia}
           style={[styles.galleryControl, recordingVideo ? styles.captureButtonDisabled : null]}
         >
-          <Images size={16} color="white" />
+          <Images size={18} color="white" />
           <ShoplyText variant="caption" style={styles.overlayText}>
             앨범
           </ShoplyText>
@@ -2317,7 +2330,7 @@ function CameraControls({
           onPress={togglePlusMenu}
           style={[styles.plusControl, recordingVideo ? styles.captureButtonDisabled : null]}
         >
-          <Plus size={19} color="white" />
+          <Plus size={21} color="white" />
         </Pressable>
       </View>
     </View>
@@ -3622,6 +3635,66 @@ function MultiIdentityInput({
   );
 }
 
+function ReviewDetailsIntro({ mediaItems }: { mediaItems: DraftReviewMedia[] }) {
+  const theme = useShoplyTheme();
+  const cover = mediaItems[0];
+
+  return (
+    <Animated.View
+      entering={FadeInDown.duration(260)}
+      style={[
+        styles.detailsIntro,
+        {
+          backgroundColor: theme.semantic.color.surfaceMuted,
+          borderColor: theme.semantic.color.border
+        }
+      ]}
+    >
+      <View style={styles.detailsIntroCopy}>
+        <View style={styles.detailsIntroFolio}>
+          <ShoplyText variant="caption" color="primary">
+            02
+          </ShoplyText>
+          <View
+            style={[styles.detailsIntroRule, { backgroundColor: theme.semantic.color.primary }]}
+          />
+          <ShoplyText variant="caption" color="textMuted">
+            상세 기록
+          </ShoplyText>
+        </View>
+        <ShoplyText variant="titleLg">써본 장면의 맥락을 남겨주세요</ShoplyText>
+        <ShoplyText variant="bodyMd" color="textMuted">
+          상품 정보와 솔직한 사용 경험을 차분히 정리하면 리뷰가 완성돼요.
+        </ShoplyText>
+      </View>
+      {cover ? (
+        <View style={[styles.detailsIntroMedia, { backgroundColor: theme.semantic.color.surface }]}>
+          {cover.mediaType === "image" ? (
+            <ExpoImage
+              source={{ uri: cover.uri }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+            />
+          ) : (
+            <Play
+              size={22}
+              color={theme.semantic.color.primary}
+              fill={theme.semantic.color.primary}
+            />
+          )}
+          {mediaItems.length > 1 ? (
+            <View style={styles.detailsIntroMediaCount}>
+              <ShoplyText variant="caption" style={styles.overlayText}>
+                +{mediaItems.length - 1}
+              </ShoplyText>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </Animated.View>
+  );
+}
+
 function DetailsStep({
   control,
   errors,
@@ -3680,7 +3753,7 @@ function DetailsStep({
         <Animated.View entering={FadeInUp.delay(40).duration(220)} style={styles.requiredSection}>
           <View style={styles.requiredSectionHeader}>
             <View style={styles.requiredSectionCopy}>
-              <ShoplyText variant="titleMd">리뷰 정보</ShoplyText>
+              <ShoplyText variant="titleMd">리뷰의 맥락</ShoplyText>
               <ShoplyText variant="caption" color="textMuted">
                 상품 정보와 직접 사용한 경험을 순서대로 알려주세요.
               </ShoplyText>
@@ -3738,191 +3811,215 @@ function DetailsStep({
             {errors.categoryId?.message ? <FieldError message={errors.categoryId.message} /> : null}
           </View>
 
-          <View style={styles.requiredFieldBlock}>
-            <View style={styles.fieldHeading}>
-              <ShoplyText variant="labelMd">브랜드 · 구매처</ShoplyText>
-              <ShoplyText variant="caption" color="textMuted">
-                선택
-              </ShoplyText>
-            </View>
-            <ShoplyText variant="caption" color="textMuted">
-              선택 항목까지 작성하면 검색과 추천에서 노출될 가능성이 높아져요.
-            </ShoplyText>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                identitySummary
-                  ? `브랜드와 구매처 변경, 현재 ${identitySummary}`
-                  : "브랜드와 구매처 추가"
-              }
-              onPress={() => setIdentityOpen(true)}
-              style={({ pressed }) => [
-                styles.identityTrigger,
-                {
-                  backgroundColor: pressed
-                    ? theme.semantic.color.primarySoft
-                    : theme.semantic.color.surfaceMuted
-                }
-              ]}
-            >
-              <View style={styles.identityTriggerCopy}>
-                <ShoplyText variant="labelMd">
-                  {identityCount
-                    ? `브랜드 · 구매처 ${identityCount}개 선택`
-                    : "브랜드 · 구매처 추가"}
+          {selectedCategory ? (
+            <Animated.View entering={FadeInUp.duration(220)} style={styles.categoryDependentFields}>
+              <View style={styles.requiredFieldBlock}>
+                <View style={styles.fieldHeading}>
+                  <ShoplyText variant="labelMd">브랜드 · 구매처</ShoplyText>
+                  <ShoplyText variant="caption" color="textMuted">
+                    선택
+                  </ShoplyText>
+                </View>
+                <ShoplyText variant="caption" color="textMuted">
+                  선택 항목까지 작성하면 검색과 추천에서 노출될 가능성이 높아져요.
                 </ShoplyText>
-                <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>
-                  {identitySummary || "한 번에 찾아서 선택할 수 있어요"}
-                </ShoplyText>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    identitySummary
+                      ? `브랜드와 구매처 변경, 현재 ${identitySummary}`
+                      : "브랜드와 구매처 추가"
+                  }
+                  onPress={() => setIdentityOpen(true)}
+                  style={({ pressed }) => [
+                    styles.identityTrigger,
+                    {
+                      backgroundColor: pressed
+                        ? theme.semantic.color.primarySoft
+                        : theme.semantic.color.surfaceMuted
+                    }
+                  ]}
+                >
+                  <View style={styles.identityTriggerCopy}>
+                    <ShoplyText variant="labelMd">
+                      {identityCount
+                        ? `브랜드 · 구매처 ${identityCount}개 선택`
+                        : "브랜드 · 구매처 추가"}
+                    </ShoplyText>
+                    <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>
+                      {identitySummary || "한 번에 찾아서 선택할 수 있어요"}
+                    </ShoplyText>
+                  </View>
+                  <ChevronRight
+                    size={20}
+                    color={
+                      identityCount ? theme.semantic.color.primary : theme.semantic.color.textMuted
+                    }
+                  />
+                </Pressable>
               </View>
-              <ChevronRight
-                size={20}
-                color={
-                  identityCount ? theme.semantic.color.primary : theme.semantic.color.textMuted
-                }
-              />
-            </Pressable>
-          </View>
 
-          <View style={styles.requiredFieldBlock}>
-            <View style={styles.fieldHeading}>
-              <ShoplyText variant="labelMd">리뷰 제목</ShoplyText>
-              <ShoplyText variant="caption" color="textMuted">
-                필수
-              </ShoplyText>
-            </View>
-            <Controller
-              control={control}
-              name="title"
-              render={({ field: { value, onChange, onBlur } }) => (
-                <Field
-                  value={value}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  placeholder="리뷰 제목을 입력해주세요"
-                  error={errors.title?.message}
+              <View style={styles.requiredFieldBlock}>
+                <View style={styles.fieldHeading}>
+                  <ShoplyText variant="labelMd">리뷰 제목</ShoplyText>
+                  <ShoplyText variant="caption" color="textMuted">
+                    필수
+                  </ShoplyText>
+                </View>
+                <Controller
+                  control={control}
+                  name="title"
+                  render={({ field: { value, onChange, onBlur } }) => (
+                    <Field
+                      value={value}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      placeholder="리뷰 제목을 입력해주세요"
+                      error={errors.title?.message}
+                    />
+                  )}
                 />
-              )}
-            />
-          </View>
+              </View>
 
-          <View style={styles.requiredFieldBlock}>
-            <View style={styles.fieldHeading}>
-              <ShoplyText variant="labelMd">리뷰 본문</ShoplyText>
-              <ShoplyText variant="caption" color="textMuted">
-                필수
-              </ShoplyText>
-            </View>
-            <View
+              <View style={styles.requiredFieldBlock}>
+                <View style={styles.fieldHeading}>
+                  <ShoplyText variant="labelMd">리뷰 본문</ShoplyText>
+                  <ShoplyText variant="caption" color="textMuted">
+                    필수
+                  </ShoplyText>
+                </View>
+                <View
+                  style={[
+                    styles.bodyPromptCard,
+                    {
+                      backgroundColor: theme.semantic.color.surfaceMuted,
+                      borderColor: theme.semantic.color.border
+                    }
+                  ]}
+                >
+                  <View style={styles.bodyPromptHeader}>
+                    <ShoplyText variant="labelMd">이 키워드를 포함해보세요</ShoplyText>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="리뷰 본문 작성 예시 보기"
+                      hitSlop={6}
+                      onPress={() => setBodyGuideOpen(true)}
+                      style={({ pressed }) => [
+                        styles.bodyExampleLink,
+                        { opacity: pressed ? 0.58 : 1 }
+                      ]}
+                    >
+                      <ShoplyText variant="labelMd" style={{ color: theme.semantic.color.primary }}>
+                        작성 예시 보기
+                      </ShoplyText>
+                      <ChevronRight size={16} color={theme.semantic.color.primary} />
+                    </Pressable>
+                  </View>
+                  <View style={styles.bodyKeywordWrap}>
+                    {bodyKeywords.map((keyword) => (
+                      <View
+                        key={keyword}
+                        style={[
+                          styles.bodyKeyword,
+                          {
+                            backgroundColor: theme.semantic.color.surface,
+                            borderColor: theme.semantic.color.border
+                          }
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.bodyKeywordDot,
+                            { backgroundColor: theme.semantic.color.primary }
+                          ]}
+                        />
+                        <ShoplyText variant="caption">{keyword}</ShoplyText>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+                <Controller
+                  control={control}
+                  name="body"
+                  render={({ field: { value, onChange, onBlur } }) => (
+                    <Field
+                      value={value}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      placeholder={bodyPlaceholder}
+                      multiline
+                      error={errors.body?.message}
+                    />
+                  )}
+                />
+              </View>
+
+              <View style={styles.requiredFieldBlock}>
+                <View style={styles.fieldHeading}>
+                  <ShoplyText variant="labelMd">구매금액</ShoplyText>
+                  <ShoplyText variant="caption" color="textMuted">
+                    필수
+                  </ShoplyText>
+                </View>
+                <Controller
+                  control={control}
+                  name="purchasePrice"
+                  render={({ field: { value, onChange, onBlur } }) => (
+                    <Field
+                      value={value}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      placeholder="대략적인 금액을 입력해주세요"
+                      keyboardType="number-pad"
+                      error={errors.purchasePrice?.message}
+                    />
+                  )}
+                />
+              </View>
+
+              <View style={styles.requiredFieldBlock}>
+                <View style={styles.fieldHeading}>
+                  <ShoplyText variant="labelMd">광고·협찬 여부</ShoplyText>
+                  <ShoplyText variant="caption" color="textMuted">
+                    필수
+                  </ShoplyText>
+                </View>
+                <ShoplyText variant="caption" color="textMuted">
+                  해당 없음도 직접 선택해주세요. 선택한 표기는 리뷰에 명확히 표시돼요.
+                </ShoplyText>
+                <View style={styles.chipWrap}>
+                  {disclosureOptions.map((item) => (
+                    <Chip
+                      key={item.label}
+                      label={item.label}
+                      selected={disclosureConfirmed && disclosure === item.value}
+                      onPress={() => setDisclosure(item.value)}
+                    />
+                  ))}
+                </View>
+                {errors.disclosureConfirmed?.message ? (
+                  <FieldError message={errors.disclosureConfirmed.message} />
+                ) : null}
+              </View>
+            </Animated.View>
+          ) : (
+            <Animated.View
+              entering={FadeIn.duration(180)}
+              accessibilityLiveRegion="polite"
               style={[
-                styles.bodyPromptCard,
+                styles.categoryGateHint,
                 {
                   backgroundColor: theme.semantic.color.surfaceMuted,
                   borderColor: theme.semantic.color.border
                 }
               ]}
             >
-              <View style={styles.bodyPromptHeader}>
-                <ShoplyText variant="labelMd">이 키워드를 포함해보세요</ShoplyText>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="리뷰 본문 작성 예시 보기"
-                  hitSlop={6}
-                  onPress={() => setBodyGuideOpen(true)}
-                  style={({ pressed }) => [styles.bodyExampleLink, { opacity: pressed ? 0.58 : 1 }]}
-                >
-                  <ShoplyText variant="labelMd" style={{ color: theme.semantic.color.primary }}>
-                    작성 예시 보기
-                  </ShoplyText>
-                  <ChevronRight size={16} color={theme.semantic.color.primary} />
-                </Pressable>
-              </View>
-              <View style={styles.bodyKeywordWrap}>
-                {bodyKeywords.map((keyword) => (
-                  <View
-                    key={keyword}
-                    style={[
-                      styles.bodyKeyword,
-                      {
-                        backgroundColor: theme.semantic.color.surface,
-                        borderColor: theme.semantic.color.border
-                      }
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.bodyKeywordDot,
-                        { backgroundColor: theme.semantic.color.primary }
-                      ]}
-                    />
-                    <ShoplyText variant="caption">{keyword}</ShoplyText>
-                  </View>
-                ))}
-              </View>
-            </View>
-            <Controller
-              control={control}
-              name="body"
-              render={({ field: { value, onChange, onBlur } }) => (
-                <Field
-                  value={value}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  placeholder={bodyPlaceholder}
-                  multiline
-                  error={errors.body?.message}
-                />
-              )}
-            />
-          </View>
-
-          <View style={styles.requiredFieldBlock}>
-            <View style={styles.fieldHeading}>
-              <ShoplyText variant="labelMd">구매금액</ShoplyText>
+              <ShoplyText variant="labelMd">카테고리를 먼저 선택해주세요</ShoplyText>
               <ShoplyText variant="caption" color="textMuted">
-                필수
+                선택한 카테고리에 맞는 리뷰 작성 항목을 이어서 보여드릴게요.
               </ShoplyText>
-            </View>
-            <Controller
-              control={control}
-              name="purchasePrice"
-              render={({ field: { value, onChange, onBlur } }) => (
-                <Field
-                  value={value}
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  placeholder="대략적인 금액을 입력해주세요"
-                  keyboardType="number-pad"
-                  error={errors.purchasePrice?.message}
-                />
-              )}
-            />
-          </View>
-
-          <View style={styles.requiredFieldBlock}>
-            <View style={styles.fieldHeading}>
-              <ShoplyText variant="labelMd">광고·협찬 여부</ShoplyText>
-              <ShoplyText variant="caption" color="textMuted">
-                필수
-              </ShoplyText>
-            </View>
-            <ShoplyText variant="caption" color="textMuted">
-              해당 없음도 직접 선택해주세요. 선택한 표기는 리뷰에 명확히 표시돼요.
-            </ShoplyText>
-            <View style={styles.chipWrap}>
-              {disclosureOptions.map((item) => (
-                <Chip
-                  key={item.label}
-                  label={item.label}
-                  selected={disclosureConfirmed && disclosure === item.value}
-                  onPress={() => setDisclosure(item.value)}
-                />
-              ))}
-            </View>
-            {errors.disclosureConfirmed?.message ? (
-              <FieldError message={errors.disclosureConfirmed.message} />
-            ) : null}
-          </View>
+            </Animated.View>
+          )}
         </Animated.View>
       </View>
 
@@ -4488,10 +4585,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     flexDirection: "row",
     gap: 5,
-    height: 36,
+    height: 42,
     justifyContent: "center",
-    minWidth: 76,
-    paddingHorizontal: 14
+    minWidth: 84,
+    paddingHorizontal: 16
   },
   captureButton: {
     alignItems: "center",
@@ -4527,9 +4624,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(5, 5, 7, 0.42)",
     borderRadius: 999,
-    height: 38,
+    height: 44,
     justifyContent: "center",
-    width: 38
+    width: 44
   },
   overlayIconButton: {
     alignItems: "center",
@@ -4778,7 +4875,9 @@ const styles = StyleSheet.create({
   },
   linkSheetContent: {
     gap: 12,
-    paddingBottom: 2
+    paddingBottom: 4,
+    paddingHorizontal: 6,
+    paddingTop: 4
   },
   sheetHandle: {
     alignSelf: "center",
@@ -4881,6 +4980,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10
   },
+  detailsStickyHeader: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+    paddingVertical: 4
+  },
   detailsBackButton: {
     alignItems: "center",
     height: 44,
@@ -4892,8 +4996,59 @@ const styles = StyleSheet.create({
     gap: 2,
     minWidth: 0
   },
+  detailsIntro: {
+    alignItems: "stretch",
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 14,
+    padding: 16
+  },
+  detailsIntroCopy: {
+    flex: 1,
+    gap: 7,
+    justifyContent: "center",
+    minWidth: 0
+  },
+  detailsIntroFolio: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 7
+  },
+  detailsIntroMedia: {
+    alignItems: "center",
+    borderRadius: 14,
+    height: 104,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 82
+  },
+  detailsIntroMediaCount: {
+    alignItems: "center",
+    backgroundColor: "rgba(5, 5, 7, 0.68)",
+    borderRadius: 999,
+    bottom: 7,
+    minWidth: 28,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    position: "absolute",
+    right: 7
+  },
+  detailsIntroRule: {
+    height: StyleSheet.hairlineWidth,
+    width: 22
+  },
   stepContent: {
     gap: 14
+  },
+  categoryDependentFields: {
+    gap: 16
+  },
+  categoryGateHint: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 5,
+    padding: 16
   },
   requiredSection: {
     gap: 16
@@ -5053,7 +5208,9 @@ const styles = StyleSheet.create({
   },
   detailsMetaContent: {
     gap: 12,
-    paddingBottom: 18
+    paddingBottom: 18,
+    paddingHorizontal: 6,
+    paddingTop: 4
   },
   bodyGuideSheet: {
     borderTopLeftRadius: 24,

@@ -3,6 +3,7 @@ import type { Onboarding, OnboardingAnswer, UserProfile } from "@/shared/api/gen
 
 export interface SaveOnboardingInput {
   nickname?: string;
+  profileImageUrl?: string | null;
   categoryIds?: string[];
   skipped?: boolean;
 }
@@ -10,10 +11,13 @@ export interface SaveOnboardingInput {
 export async function saveOnboarding(input: SaveOnboardingInput) {
   const nickname = input.nickname?.trim();
 
-  if (nickname) {
+  if (nickname || input.profileImageUrl !== undefined) {
     await apiRequest<UserProfile>("/users/me/profile", {
       method: "PATCH",
-      body: JSON.stringify({ nickname })
+      body: JSON.stringify({
+        ...(nickname ? { nickname } : {}),
+        ...(input.profileImageUrl !== undefined ? { profileImageUrl: input.profileImageUrl } : {})
+      })
     });
   }
 
@@ -24,6 +28,7 @@ export async function saveOnboarding(input: SaveOnboardingInput) {
       brandId: null,
       answerPayload: {
         nickname: nickname ?? null,
+        profileImageAdded: Boolean(input.profileImageUrl),
         skipped: Boolean(input.skipped)
       }
     },
