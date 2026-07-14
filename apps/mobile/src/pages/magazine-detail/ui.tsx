@@ -2,7 +2,16 @@ import { useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { ArrowLeft, BookmarkPlus, Check, Edit3, Send, X } from "lucide-react-native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Button,
@@ -93,46 +102,83 @@ export function MagazineDetailPage() {
     );
   }
   const editable = issue.isOwner && issue.issueType === "custom";
+  const sourceSlotNumber =
+    issue.sections
+      .flatMap((section) => section.items)
+      .findIndex((item) => item.id === sourceSlotId) + 1;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.semantic.color.background }} edges={["top"]}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
+      edges={["top"]}
+    >
       <MagazineIssueViewer
         issue={issue}
         regeneratingBlockId={regenerateBlock.variables?.blockId ?? null}
         onEditBlock={editable ? setEditingBlock : undefined}
-        onRegenerateBlock={editable ? (block) => regenerateBlock.mutate({ issueId: issue.id, blockId: block.id }) : undefined}
-        onChangeCrop={editable ? (itemId, cropPayload) => updateItems.mutate({
-          issueId: issue.id,
-          items: issue.sections.flatMap((section) => section.items.map((item) => ({
-            itemId: item.id,
-            sectionId: section.id,
-            sortOrder: item.sortOrder,
-            ...(item.id === itemId ? { cropPayload } : {})
-          })))
-        }) : undefined}
-        onSelectReview={editable ? (itemId) => {
-          setSourceSlotId(itemId);
-          setSourcesOpen(true);
-        } : undefined}
-        header={
-          <MagazineHeader
-            issue={issue}
-            subscribing={subscription.isPending}
-            onSubscribe={() => subscription.mutate({ seriesId: issue.owner.userId, subscribed: issue.isSubscribed })}
-          />
+        onRegenerateBlock={
+          editable
+            ? (block) => regenerateBlock.mutate({ issueId: issue.id, blockId: block.id })
+            : undefined
         }
-        footer={editable ? (
-          <MagazineEditorPanel
-            issue={issue}
-            busy={updateMagazine.isPending || updateItems.isPending || publish.isPending}
-            onUpdate={(patch) => updateMagazine.mutate({ issueId: issue.id, patch })}
-            onPublish={() => {
-              Alert.alert("이 잡지를 발행할까요?", "발행하면 다른 사용자가 보고 구독할 수 있어요.", [
-                { text: "취소", style: "cancel" },
-                { text: "발행", onPress: () => publish.mutate(issue.id) }
-              ]);
-            }}
-          />
-        ) : null}
+        onChangeCrop={
+          editable
+            ? (itemId, cropPayload) =>
+                updateItems.mutate({
+                  issueId: issue.id,
+                  items: issue.sections.flatMap((section) =>
+                    section.items.map((item) => ({
+                      itemId: item.id,
+                      sectionId: section.id,
+                      sortOrder: item.sortOrder,
+                      ...(item.id === itemId ? { cropPayload } : {})
+                    }))
+                  )
+                })
+            : undefined
+        }
+        onSelectReview={
+          editable
+            ? (itemId) => {
+                setSourceSlotId(itemId);
+                setSourcesOpen(true);
+              }
+            : undefined
+        }
+        header={
+          editable ? (
+            <EditionStudioHeader issue={issue} />
+          ) : (
+            <MagazineHeader
+              issue={issue}
+              subscribing={subscription.isPending}
+              onSubscribe={() =>
+                subscription.mutate({
+                  seriesId: issue.owner.userId,
+                  subscribed: issue.isSubscribed
+                })
+              }
+            />
+          )
+        }
+        footer={
+          editable ? (
+            <MagazineEditorPanel
+              issue={issue}
+              busy={updateMagazine.isPending || updateItems.isPending || publish.isPending}
+              onUpdate={(patch) => updateMagazine.mutate({ issueId: issue.id, patch })}
+              onPublish={() => {
+                Alert.alert(
+                  "이 잡지를 발행할까요?",
+                  "발행하면 다른 사용자가 보고 구독할 수 있어요.",
+                  [
+                    { text: "취소", style: "cancel" },
+                    { text: "발행", onPress: () => publish.mutate(issue.id) }
+                  ]
+                );
+              }}
+            />
+          ) : null
+        }
       />
 
       <KeyboardAwareBottomSheet
@@ -148,7 +194,13 @@ export function MagazineDetailPage() {
               사실 정보는 고정되고 에디토리얼 문장만 바뀝니다.
             </ShoplyText>
           </View>
-          <Button size="icon" variant="tertiary" accessibilityLabel="문장 편집 닫기" icon={<X size={18} color={theme.semantic.color.text} />} onPress={() => setEditingBlock(null)} />
+          <Button
+            size="icon"
+            variant="tertiary"
+            accessibilityLabel="문장 편집 닫기"
+            icon={<X size={18} color={theme.semantic.color.text} />}
+            onPress={() => setEditingBlock(null)}
+          />
         </View>
         <TextInput
           accessibilityLabel="에디토리얼 문장"
@@ -157,7 +209,10 @@ export function MagazineDetailPage() {
           onChangeText={setDraftText}
           placeholder="잡지 문장을 입력하세요"
           placeholderTextColor={theme.semantic.color.textMuted}
-          style={[styles.textArea, { borderColor: theme.semantic.color.border, color: theme.semantic.color.text }]}
+          style={[
+            styles.textArea,
+            { borderColor: theme.semantic.color.border, color: theme.semantic.color.text }
+          ]}
           value={draftText}
         />
         <View style={styles.sheetFooter}>
@@ -169,7 +224,11 @@ export function MagazineDetailPage() {
             label={updateBlock.isPending ? "저장 중" : "문장 저장"}
             onPress={async () => {
               if (!editingBlock) return;
-              await updateBlock.mutateAsync({ issueId: issue.id, blockId: editingBlock.id, text: draftText.trim() });
+              await updateBlock.mutateAsync({
+                issueId: issue.id,
+                blockId: editingBlock.id,
+                text: draftText.trim()
+              });
               setEditingBlock(null);
             }}
           />
@@ -187,8 +246,13 @@ export function MagazineDetailPage() {
       >
         <View style={styles.sheetHeader}>
           <View style={{ flex: 1 }}>
-            <ShoplyText variant="titleMd">내 리뷰 선택</ShoplyText>
-            <ShoplyText variant="caption" color="textMuted">사진과 에디토리얼 문장이 한 세트로 이 슬롯에 배치됩니다.</ShoplyText>
+            <ShoplyText variant="caption" color="primary" style={styles.eyebrow}>
+              PLACE A STORY / SLOT {String(Math.max(1, sourceSlotNumber)).padStart(2, "0")}
+            </ShoplyText>
+            <ShoplyText style={styles.sourceSheetTitle}>어떤 장면을 놓을까요?</ShoplyText>
+            <ShoplyText variant="caption" color="textMuted">
+              선택한 리뷰의 사진과 새 에디토리얼 문장이 한 세트로 배치됩니다.
+            </ShoplyText>
           </View>
           <Button
             size="icon"
@@ -201,45 +265,160 @@ export function MagazineDetailPage() {
             }}
           />
         </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sourceList} keyboardShouldPersistTaps="handled">
-          {(sourceQuery.data ?? []).filter((source) => !issue.sections.some((section) => section.items.some((item) => item.reviewId === source.reviewId && item.id !== sourceSlotId))).map((source) => (
-            <View key={source.reviewId} style={[styles.sourceCard, { borderColor: theme.semantic.color.border }]}>
-              <View style={[styles.sourceThumb, { backgroundColor: theme.semantic.color.surfaceMuted }]}>
-                {source.mediaUrl ? <Image accessibilityLabel="추가할 리뷰 사진" contentFit="cover" source={{ uri: source.mediaUrl }} style={StyleSheet.absoluteFill} /> : null}
-              </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <ShoplyText variant="labelLg" numberOfLines={2}>{source.productName ?? source.title ?? "리뷰 아이템"}</ShoplyText>
-                <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>{source.brandName ?? "브랜드 미지정"} · @{source.authorNickname}</ShoplyText>
-              </View>
-              <Button
-                accessibilityLabel={`${source.productName ?? source.title ?? "리뷰"}를 선택한 슬롯에 배치`}
-                disabled={!sourceSlotId || fillSlot.isPending}
-                label={fillSlot.isPending && fillSlot.variables?.reviewId === source.reviewId ? "문장 작성 중" : "선택"}
-                size="sm"
-                onPress={async () => {
-                  if (!sourceSlotId) return;
-                  try {
-                    await fillSlot.mutateAsync({
-                      issueId: issue.id,
-                      slotId: sourceSlotId,
-                      reviewId: source.reviewId
-                    });
-                    setSourcesOpen(false);
-                    setSourceSlotId(null);
-                  } catch (error) {
-                    Alert.alert("리뷰를 배치하지 못했어요", userFacingErrorMessage(error, "잠시 후 다시 시도해주세요."));
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.sourceList}
+          keyboardShouldPersistTaps="handled"
+        >
+          {(sourceQuery.data ?? [])
+            .filter(
+              (source) =>
+                !issue.sections.some((section) =>
+                  section.items.some(
+                    (item) => item.reviewId === source.reviewId && item.id !== sourceSlotId
+                  )
+                )
+            )
+            .map((source) => (
+              <View
+                key={source.reviewId}
+                style={[styles.sourceCard, { borderColor: theme.semantic.color.border }]}
+              >
+                <View
+                  style={[
+                    styles.sourceThumb,
+                    { backgroundColor: theme.semantic.color.surfaceMuted }
+                  ]}
+                >
+                  {source.mediaUrl ? (
+                    <Image
+                      accessibilityLabel="추가할 리뷰 사진"
+                      contentFit="cover"
+                      source={{ uri: source.mediaUrl }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  ) : null}
+                  <View
+                    style={[
+                      styles.sourceSelectMark,
+                      { backgroundColor: theme.semantic.color.primary }
+                    ]}
+                  >
+                    <ShoplyText
+                      variant="caption"
+                      style={{ color: theme.semantic.color.textInverse }}
+                    >
+                      SELECT
+                    </ShoplyText>
+                  </View>
+                </View>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <ShoplyText variant="labelLg" numberOfLines={2}>
+                    {source.productName ?? source.title ?? "리뷰 아이템"}
+                  </ShoplyText>
+                  <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>
+                    {source.brandName ?? "브랜드 미지정"} · @{source.authorNickname}
+                  </ShoplyText>
+                </View>
+                <Button
+                  accessibilityLabel={`${source.productName ?? source.title ?? "리뷰"}를 선택한 슬롯에 배치`}
+                  disabled={!sourceSlotId || fillSlot.isPending}
+                  label={
+                    fillSlot.isPending && fillSlot.variables?.reviewId === source.reviewId
+                      ? "문장 작성 중"
+                      : "선택"
                   }
-                }}
-              />
-            </View>
-          ))}
-          {sourceQuery.isPending ? <ActivityIndicator color={theme.semantic.color.primary} /> : null}
+                  size="sm"
+                  onPress={async () => {
+                    if (!sourceSlotId) return;
+                    try {
+                      await fillSlot.mutateAsync({
+                        issueId: issue.id,
+                        slotId: sourceSlotId,
+                        reviewId: source.reviewId
+                      });
+                      setSourcesOpen(false);
+                      setSourceSlotId(null);
+                    } catch (error) {
+                      Alert.alert(
+                        "리뷰를 배치하지 못했어요",
+                        userFacingErrorMessage(error, "잠시 후 다시 시도해주세요.")
+                      );
+                    }
+                  }}
+                />
+              </View>
+            ))}
+          {sourceQuery.isPending ? (
+            <ActivityIndicator color={theme.semantic.color.primary} />
+          ) : null}
           {!sourceQuery.isPending && !(sourceQuery.data ?? []).length ? (
-            <ShoplyText color="textMuted" align="center">추가할 수 있는 리뷰가 아직 없어요.</ShoplyText>
+            <ShoplyText color="textMuted" align="center">
+              추가할 수 있는 리뷰가 아직 없어요.
+            </ShoplyText>
           ) : null}
         </ScrollView>
       </KeyboardAwareBottomSheet>
     </SafeAreaView>
+  );
+}
+
+function EditionStudioHeader({ issue }: { issue: MagazineIssue }) {
+  const theme = useShoplyTheme();
+  const items = issue.sections.flatMap((section) => section.items);
+  const filled = items.filter((item) => item.reviewId).length;
+  const progress = items.length ? filled / items.length : 0;
+  return (
+    <View
+      style={[
+        styles.studioHeader,
+        {
+          backgroundColor: theme.semantic.color.background,
+          borderColor: theme.semantic.color.borderStrong
+        }
+      ]}
+    >
+      <View style={styles.studioHeaderTop}>
+        <Button
+          accessibilityLabel="쇼플리 에디션 목록으로 돌아가기"
+          icon={<ArrowLeft size={20} color={theme.semantic.color.text} />}
+          onPress={() => goBackOrReplace("/(tabs)/shoply")}
+          size="icon"
+          variant="tertiary"
+        />
+        <View style={{ flex: 1 }}>
+          <ShoplyText variant="caption" color="primary" style={styles.eyebrow}>
+            SHOPLY EDITION STUDIO
+          </ShoplyText>
+          <ShoplyText variant="labelLg" numberOfLines={1}>
+            {issue.issueLabel} · {layoutName(issue.baseLayout)}
+          </ShoplyText>
+        </View>
+        <View style={[styles.draftStamp, { borderColor: theme.semantic.color.primary }]}>
+          <ShoplyText variant="caption" color="primary">
+            DRAFT
+          </ShoplyText>
+        </View>
+      </View>
+      <View style={styles.studioProgressRow}>
+        <ShoplyText variant="caption" color="textMuted">
+          GRID COMPLETION
+        </ShoplyText>
+        <View
+          style={[styles.studioProgressTrack, { backgroundColor: theme.semantic.color.border }]}
+        >
+          <View
+            style={[
+              styles.studioProgressFill,
+              { backgroundColor: theme.semantic.color.primary, width: `${progress * 100}%` }
+            ]}
+          />
+        </View>
+        <ShoplyText variant="caption" color="primary">
+          {filled}/{items.length}
+        </ShoplyText>
+      </View>
+    </View>
   );
 }
 
@@ -262,12 +441,16 @@ function MagazineGenerationState({ issue }: { issue: MagazineIssue }) {
         <ShoplyWordmark width={104} />
       </View>
       <View style={styles.generationBody}>
-        <View style={[styles.generationMonogram, { backgroundColor: theme.semantic.color.primarySoft }]}>
+        <View
+          style={[styles.generationMonogram, { backgroundColor: theme.semantic.color.primarySoft }]}
+        >
           <ShoplySMonogram size={156} color={theme.semantic.color.primary} />
         </View>
         <ActivityIndicator color={theme.semantic.color.primary} size="large" />
         <View style={styles.generationCopy}>
-          <ShoplyText variant="caption" color="primary" style={styles.eyebrow}>{issue.issueLabel}</ShoplyText>
+          <ShoplyText variant="caption" color="primary" style={styles.eyebrow}>
+            {issue.issueLabel}
+          </ShoplyText>
           <ShoplyText style={styles.generationTitle}>생성중입니다.</ShoplyText>
           <ShoplyText variant="bodyLg" color="textMuted" align="center">
             활동 기록과 취향을 고르고, 실제 잡지처럼 문장과 페이지를 편집하고 있어요.
@@ -289,7 +472,15 @@ function MagazineHeader({
 }) {
   const theme = useShoplyTheme();
   return (
-    <View style={[styles.header, { backgroundColor: theme.semantic.color.background, borderColor: theme.semantic.color.border }]}>
+    <View
+      style={[
+        styles.header,
+        {
+          backgroundColor: theme.semantic.color.background,
+          borderColor: theme.semantic.color.border
+        }
+      ]}
+    >
       <Button
         accessibilityLabel="쇼플리 매거진 목록으로 돌아가기"
         icon={<ArrowLeft size={20} color={theme.semantic.color.text} />}
@@ -298,13 +489,23 @@ function MagazineHeader({
         variant="tertiary"
       />
       <View style={{ flex: 1 }}>
-        <ShoplyText variant="labelLg" numberOfLines={1}>{issue.issueLabel}</ShoplyText>
-        <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>@{issue.owner.nickname}</ShoplyText>
+        <ShoplyText variant="labelLg" numberOfLines={1}>
+          {issue.issueLabel}
+        </ShoplyText>
+        <ShoplyText variant="caption" color="textMuted" numberOfLines={1}>
+          @{issue.owner.nickname}
+        </ShoplyText>
       </View>
       {!issue.isOwner && issue.issueType === "custom" ? (
         <Button
           disabled={subscribing}
-          icon={issue.isSubscribed ? <Check size={16} color={theme.semantic.color.primary} /> : <BookmarkPlus size={16} color={theme.semantic.color.textInverse} />}
+          icon={
+            issue.isSubscribed ? (
+              <Check size={16} color={theme.semantic.color.primary} />
+            ) : (
+              <BookmarkPlus size={16} color={theme.semantic.color.textInverse} />
+            )
+          }
           label={issue.isSubscribed ? "구독 중 · Pick" : "구독 + Pick"}
           onPress={onSubscribe}
           size="sm"
@@ -331,32 +532,58 @@ function MagazineEditorPanel({
   const [title, setTitle] = useState(issue.revision.coverTitle ?? "");
   const [subtitle, setSubtitle] = useState(issue.revision.coverSubtitle ?? "");
   const [letter, setLetter] = useState(issue.revision.editorLetter ?? "");
-  const [focusSectionId, setFocusSectionId] = useState(issue.sections.find((section) => section.layoutOverride)?.id ?? issue.sections[0]?.id ?? null);
+  const [focusSectionId, setFocusSectionId] = useState(
+    issue.sections.find((section) => section.layoutOverride)?.id ?? issue.sections[0]?.id ?? null
+  );
   const [discount, setDiscount] = useState("");
   const [endDate, setEndDate] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
 
   return (
-    <View style={[styles.editorPanel, { backgroundColor: theme.semantic.color.surfaceMuted }]}>
+    <View
+      style={[
+        styles.editorPanel,
+        {
+          backgroundColor: theme.semantic.color.background,
+          borderColor: theme.semantic.color.primary
+        }
+      ]}
+    >
       <View style={styles.editorHeading}>
         <View style={{ flex: 1 }}>
-          <ShoplyText variant="caption" color="primary" style={styles.eyebrow}>EDITOR DESK</ShoplyText>
-          <ShoplyText variant="titleLg">내 커스텀 잡지 편집</ShoplyText>
+          <ShoplyText variant="caption" color="primary" style={styles.eyebrow}>
+            EDITOR DESK / 04
+          </ShoplyText>
+          <ShoplyText style={styles.editorTitle}>에디션 편집실</ShoplyText>
         </View>
         <Edit3 size={24} color={theme.semantic.color.primary} />
       </View>
 
       <EditorLabel label="기본 레이아웃" />
-      <View style={styles.chipRow}>
+      <View style={styles.layoutChoices}>
         {(["atelier", "zine", "edit"] as MagazineLayout[]).map((layout) => (
-          <Chip key={layout} label={layoutName(layout)} selected={issue.baseLayout === layout} onPress={() => onUpdate({ baseLayout: layout })} />
+          <LayoutChoice
+            key={layout}
+            layout={layout}
+            selected={issue.baseLayout === layout}
+            onPress={() => onUpdate({ baseLayout: layout })}
+          />
         ))}
       </View>
 
       <EditorLabel label="강조할 섹션 · 최대 1개" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipRow}
+      >
         {issue.sections.map((section) => (
-          <Chip key={section.id} label={section.title} selected={focusSectionId === section.id} onPress={() => setFocusSectionId(section.id)} />
+          <Chip
+            key={section.id}
+            label={section.title}
+            selected={focusSectionId === section.id}
+            onPress={() => setFocusSectionId(section.id)}
+          />
         ))}
       </ScrollView>
       {focusSectionId ? (
@@ -367,36 +594,74 @@ function MagazineEditorPanel({
               label={layoutName(layout)}
               size="sm"
               variant="secondary"
-              onPress={() => onUpdate({ sectionLayoutOverride: { sectionId: focusSectionId, layout } })}
+              onPress={() =>
+                onUpdate({ sectionLayoutOverride: { sectionId: focusSectionId, layout } })
+              }
             />
           ))}
-          <Button label="해제" size="sm" variant="tertiary" onPress={() => onUpdate({ sectionLayoutOverride: { sectionId: focusSectionId, layout: null } })} />
+          <Button
+            label="해제"
+            size="sm"
+            variant="tertiary"
+            onPress={() =>
+              onUpdate({ sectionLayoutOverride: { sectionId: focusSectionId, layout: null } })
+            }
+          />
         </View>
       ) : null}
 
       <EditorLabel label="표지와 에디터 레터" />
       <EditorInput label="표지 제목" maxLength={18} value={title} onChangeText={setTitle} />
       <EditorInput label="표지 부제" maxLength={45} value={subtitle} onChangeText={setSubtitle} />
-      <EditorInput label="에디터 레터" maxLength={500} multiline value={letter} onChangeText={setLetter} />
+      <EditorInput
+        label="에디터 레터"
+        maxLength={500}
+        multiline
+        value={letter}
+        onChangeText={setLetter}
+      />
       <Button
         label="표지 문구 저장"
         variant="secondary"
-        onPress={() => onUpdate({ coverTitle: title.trim(), coverSubtitle: subtitle.trim() || null, editorLetter: letter.trim() || null })}
+        onPress={() =>
+          onUpdate({
+            coverTitle: title.trim(),
+            coverSubtitle: subtitle.trim() || null,
+            editorLetter: letter.trim() || null
+          })
+        }
       />
 
       <View style={[styles.rule, { backgroundColor: theme.semantic.color.border }]} />
       <EditorLabel label="콘텐츠 구성" />
       <ShoplyText variant="bodyMd" color="textMuted">
-        지면의 빈 칸을 눌러 내 리뷰를 배치하세요. 리뷰를 고른 슬롯에만 문장이 한 번 생성되며, 이후에는 직접 수정할 수 있습니다.
+        지면의 빈 칸을 눌러 내 리뷰를 배치하세요. 리뷰를 고른 슬롯에만 문장이 한 번 생성되며,
+        이후에는 직접 수정할 수 있습니다.
       </ShoplyText>
 
       <View style={[styles.rule, { backgroundColor: theme.semantic.color.border }]} />
       <EditorLabel label="이번 호 특가 · 에디터 제공 정보" />
       <View style={styles.inlineFields}>
-        <View style={{ flex: 0.4 }}><EditorInput keyboardType="number-pad" label="할인율 %" maxLength={3} value={discount} onChangeText={setDiscount} /></View>
-        <View style={{ flex: 1 }}><EditorInput label="종료일 YYYY-MM-DD" value={endDate} onChangeText={setEndDate} /></View>
+        <View style={{ flex: 0.4 }}>
+          <EditorInput
+            keyboardType="number-pad"
+            label="할인율 %"
+            maxLength={3}
+            value={discount}
+            onChangeText={setDiscount}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <EditorInput label="종료일 YYYY-MM-DD" value={endDate} onChangeText={setEndDate} />
+        </View>
       </View>
-      <EditorInput autoCapitalize="none" keyboardType="url" label="출처 URL" value={sourceUrl} onChangeText={setSourceUrl} />
+      <EditorInput
+        autoCapitalize="none"
+        keyboardType="url"
+        label="출처 URL"
+        value={sourceUrl}
+        onChangeText={setSourceUrl}
+      />
       <Button
         disabled={deal.isPending || !validDeal(discount, endDate, sourceUrl)}
         label={deal.isPending ? "특가 저장 중" : "특가 정보 추가"}
@@ -420,7 +685,8 @@ function MagazineEditorPanel({
 
       <View style={[styles.rule, { backgroundColor: theme.semantic.color.border }]} />
       <ShoplyText variant="caption" color="textMuted">
-        발행 전 광고·협찬·구매 인증과 원문 출처를 다시 확인해주세요. 발행본 수정은 새 리비전으로 안전하게 저장됩니다.
+        발행 전 광고·협찬·구매 인증과 원문 출처를 다시 확인해주세요. 발행본 수정은 새 리비전으로
+        안전하게 저장됩니다.
       </ShoplyText>
       <Button
         disabled={busy}
@@ -433,20 +699,109 @@ function MagazineEditorPanel({
 }
 
 function EditorLabel({ label }: { label: string }) {
-  return <ShoplyText variant="labelLg" style={{ marginTop: 4 }}>{label}</ShoplyText>;
+  return (
+    <ShoplyText variant="labelLg" style={{ marginTop: 4 }}>
+      {label}
+    </ShoplyText>
+  );
 }
 
-function EditorInput({ label, multiline, ...props }: React.ComponentProps<typeof TextInput> & { label: string }) {
+function LayoutChoice({
+  layout,
+  selected,
+  onPress
+}: {
+  layout: MagazineLayout;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useShoplyTheme();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.layoutChoice,
+        {
+          backgroundColor: selected
+            ? theme.semantic.color.primarySoft
+            : theme.semantic.color.surface,
+          borderColor: selected ? theme.semantic.color.primary : theme.semantic.color.border,
+          opacity: pressed ? 0.7 : 1
+        }
+      ]}
+    >
+      <View style={styles.layoutMiniature}>
+        {layout === "atelier" ? (
+          <>
+            <View
+              style={[styles.layoutMiniLead, { backgroundColor: theme.semantic.color.primary }]}
+            />
+            <View
+              style={[
+                styles.layoutMiniSmall,
+                { backgroundColor: theme.semantic.color.borderStrong }
+              ]}
+            />
+          </>
+        ) : layout === "zine" ? (
+          <>
+            <View
+              style={[styles.layoutMiniZineOne, { backgroundColor: theme.semantic.color.primary }]}
+            />
+            <View
+              style={[styles.layoutMiniZineTwo, { backgroundColor: theme.semantic.color.text }]}
+            />
+          </>
+        ) : (
+          <>
+            {[0, 1, 2, 3].map((index) => (
+              <View
+                key={index}
+                style={[
+                  styles.layoutMiniEdit,
+                  {
+                    backgroundColor:
+                      index === 0 ? theme.semantic.color.primary : theme.semantic.color.borderStrong
+                  }
+                ]}
+              />
+            ))}
+          </>
+        )}
+      </View>
+      <ShoplyText
+        variant="caption"
+        style={{ color: selected ? theme.semantic.color.primary : theme.semantic.color.text }}
+      >
+        {layoutName(layout)}
+      </ShoplyText>
+    </Pressable>
+  );
+}
+
+function EditorInput({
+  label,
+  multiline,
+  ...props
+}: React.ComponentProps<typeof TextInput> & { label: string }) {
   const theme = useShoplyTheme();
   return (
     <View style={{ gap: 5 }}>
-      <ShoplyText variant="caption" color="textMuted">{label}</ShoplyText>
+      <ShoplyText variant="caption" color="textMuted">
+        {label}
+      </ShoplyText>
       <TextInput
         {...props}
         accessibilityLabel={label}
         multiline={multiline}
         placeholderTextColor={theme.semantic.color.textMuted}
-        style={[styles.input, multiline ? styles.multiline : null, { borderColor: theme.semantic.color.border, color: theme.semantic.color.text }]}
+        style={[
+          styles.input,
+          multiline ? styles.multiline : null,
+          { borderColor: theme.semantic.color.border, color: theme.semantic.color.text }
+        ]}
       />
     </View>
   );
@@ -461,32 +816,165 @@ function layoutName(layout: MagazineLayout) {
 function validDeal(discount: string, endDate: string, sourceUrl: string) {
   const amount = Number(discount);
   const end = new Date(`${endDate}T23:59:59+09:00`);
-  return amount >= 1 && amount <= 100 && Number.isFinite(end.getTime()) && end > new Date() && /^https:\/\//i.test(sourceUrl);
+  return (
+    amount >= 1 &&
+    amount <= 100 &&
+    Number.isFinite(end.getTime()) &&
+    end > new Date() &&
+    /^https:\/\//i.test(sourceUrl)
+  );
 }
 
 const styles = StyleSheet.create({
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  draftStamp: {
+    alignItems: "center",
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 32,
+    paddingHorizontal: 9
+  },
   editorHeading: { alignItems: "center", flexDirection: "row", gap: 12 },
-  editorPanel: { gap: 13, marginTop: 34, padding: 20 },
+  editorPanel: { borderTopWidth: 4, gap: 13, marginTop: 42, padding: 20 },
+  editorTitle: {
+    fontFamily: "Georgia",
+    fontSize: 28,
+    fontWeight: "700",
+    letterSpacing: -1,
+    lineHeight: 34
+  },
   eyebrow: { letterSpacing: 1.4 },
-  header: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 10, minHeight: 58, paddingHorizontal: 12 },
+  header: {
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 10,
+    minHeight: 58,
+    paddingHorizontal: 12
+  },
   generationBody: { alignItems: "center", flex: 1, gap: 20, justifyContent: "center", padding: 28 },
   generationCopy: { alignItems: "center", gap: 8, maxWidth: 330 },
-  generationHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", minHeight: 58, paddingHorizontal: 12 },
-  generationMonogram: { alignItems: "center", height: 220, justifyContent: "center", overflow: "hidden", width: 220 },
+  generationHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 58,
+    paddingHorizontal: 12
+  },
+  generationMonogram: {
+    alignItems: "center",
+    height: 220,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 220
+  },
   generationState: { flex: 1 },
   generationTitle: { fontFamily: "Georgia", fontSize: 36, fontWeight: "700", lineHeight: 42 },
   inlineFields: { flexDirection: "row", gap: 10 },
-  input: { borderRadius: 10, borderWidth: 1, fontSize: 16, minHeight: 48, paddingHorizontal: 12, paddingVertical: 10 },
+  input: {
+    borderRadius: 10,
+    borderWidth: 1,
+    fontSize: 16,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  layoutChoice: {
+    alignItems: "center",
+    borderWidth: 1,
+    flex: 1,
+    gap: 7,
+    minHeight: 112,
+    padding: 8
+  },
+  layoutChoices: { flexDirection: "row", gap: 8 },
+  layoutMiniature: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    height: 62,
+    overflow: "hidden",
+    position: "relative",
+    width: "100%"
+  },
+  layoutMiniEdit: { height: 26, margin: 1, width: "44%" },
+  layoutMiniLead: { height: 54, left: 1, position: "absolute", top: 1, width: "62%" },
+  layoutMiniSmall: { bottom: 1, height: 25, position: "absolute", right: 1, width: "32%" },
+  layoutMiniZineOne: {
+    height: 47,
+    left: 5,
+    position: "absolute",
+    top: 4,
+    transform: [{ rotate: "-4deg" }],
+    width: "52%"
+  },
+  layoutMiniZineTwo: {
+    bottom: 3,
+    height: 34,
+    position: "absolute",
+    right: 4,
+    transform: [{ rotate: "5deg" }],
+    width: "38%"
+  },
   multiline: { minHeight: 110, textAlignVertical: "top" },
   rule: { height: StyleSheet.hairlineWidth, marginVertical: 6 },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 14, maxHeight: "80%", padding: 20, paddingBottom: Platform.OS === "ios" ? 36 : 22 },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    gap: 14,
+    maxHeight: "80%",
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 36 : 22
+  },
   sheetFooter: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   sheetHeader: { alignItems: "center", flexDirection: "row", gap: 12 },
-  sourceCard: { alignItems: "center", borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: "row", gap: 12, paddingVertical: 10 },
-  sourceList: { paddingBottom: 24 },
-  sourceSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: 12, height: "82%", padding: 20, paddingBottom: Platform.OS === "ios" ? 36 : 22 },
-  sourceThumb: { height: 72, overflow: "hidden", width: 58 },
+  sourceCard: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+    paddingBottom: 14,
+    width: "48%"
+  },
+  sourceList: { flexDirection: "row", flexWrap: "wrap", gap: 12, paddingBottom: 24 },
+  sourceSelectMark: {
+    bottom: 8,
+    left: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    position: "absolute"
+  },
+  sourceSheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    gap: 16,
+    height: "88%",
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 36 : 22
+  },
+  sourceSheetTitle: {
+    fontFamily: "Georgia",
+    fontSize: 27,
+    fontWeight: "700",
+    letterSpacing: -1,
+    lineHeight: 33
+  },
+  sourceThumb: { aspectRatio: 0.82, overflow: "hidden", width: "100%" },
   state: { alignItems: "center", flex: 1, gap: 14, justifyContent: "center", padding: 24 },
-  textArea: { borderRadius: 12, borderWidth: 1, fontSize: 17, lineHeight: 25, minHeight: 150, padding: 14, textAlignVertical: "top" }
+  studioHeader: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 10,
+    paddingHorizontal: 10,
+    paddingTop: 6
+  },
+  studioHeaderTop: { alignItems: "center", flexDirection: "row", gap: 10, minHeight: 52 },
+  studioProgressFill: { height: 3 },
+  studioProgressRow: { alignItems: "center", flexDirection: "row", gap: 9, paddingHorizontal: 8 },
+  studioProgressTrack: { flex: 1, height: 3, overflow: "hidden" },
+  textArea: {
+    borderRadius: 12,
+    borderWidth: 1,
+    fontSize: 17,
+    lineHeight: 25,
+    minHeight: 150,
+    padding: 14,
+    textAlignVertical: "top"
+  }
 });

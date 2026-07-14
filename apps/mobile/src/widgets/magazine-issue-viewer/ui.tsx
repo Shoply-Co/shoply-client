@@ -69,7 +69,10 @@ export function MagazineIssueViewer({
   return (
     <Animated.ScrollView
       accessibilityLabel={`${issue.issueLabel} 매거진`}
-      contentContainerStyle={[styles.scrollContent, { backgroundColor: theme.semantic.color.background }]}
+      contentContainerStyle={[
+        styles.scrollContent,
+        { backgroundColor: theme.semantic.color.background }
+      ]}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
       showsVerticalScrollIndicator={false}
@@ -78,7 +81,9 @@ export function MagazineIssueViewer({
       <MagazineCover issue={issue} imageUrl={coverImage} />
       <View style={styles.disclosureRow}>
         <ShoplyText variant="caption" color="textMuted">
-          {issue.revision.aiDisclosure}
+          {issue.issueType === "custom"
+            ? "선택한 리뷰의 에디토리얼 문장에만 AI를 활용합니다."
+            : issue.revision.aiDisclosure}
         </ShoplyText>
         <ShoplyText variant="caption" color="textMuted">
           {issue.status === "published" ? "PUBLISHED" : "PRIVATE DRAFT"}
@@ -124,10 +129,20 @@ export function MagazineIssueViewer({
 
 function MagazineCover({ issue, imageUrl }: { issue: MagazineIssue; imageUrl: string | null }) {
   const theme = useShoplyTheme();
+  const blankEdition = issue.issueType === "custom" && !imageUrl;
+  const coverText = imageUrl ? styles.coverText : { color: theme.semantic.color.text };
   return (
     <View
       accessibilityLabel={`${issue.issueLabel} 표지, ${issue.revision.coverTitle ?? "쇼플리 매거진"}`}
-      style={[styles.cover, { backgroundColor: theme.semantic.color.surfaceMuted }]}
+      style={[
+        styles.cover,
+        blankEdition ? styles.blankEditionCover : null,
+        {
+          backgroundColor: blankEdition
+            ? theme.semantic.color.primarySoft
+            : theme.semantic.color.surfaceMuted
+        }
+      ]}
     >
       {imageUrl ? (
         <Image
@@ -138,26 +153,56 @@ function MagazineCover({ issue, imageUrl }: { issue: MagazineIssue; imageUrl: st
           transition={180}
         />
       ) : null}
-      <View pointerEvents="none" style={styles.coverMonogram}>
-        <ShoplySMonogram size={230} color="rgba(255,255,255,0.28)" />
+      {blankEdition ? <BlankCoverGrid color={theme.semantic.color.primary} /> : null}
+      <View style={[styles.coverMonogram, blankEdition ? styles.blankCoverMonogram : null]}>
+        <ShoplySMonogram
+          size={blankEdition ? 280 : 230}
+          color={blankEdition ? theme.semantic.color.primary : "rgba(255,255,255,0.28)"}
+          style={blankEdition ? { opacity: 0.13 } : undefined}
+        />
       </View>
-      <View style={[styles.coverTopLine, { borderColor: "rgba(255,255,255,0.72)" }]}>
-        <ShoplyText variant="caption" style={styles.coverText}>{issue.issueLabel}</ShoplyText>
-        <ShoplyText variant="caption" style={styles.coverText}>SHOPLY / NO. {issue.revision.revisionNumber}</ShoplyText>
-      </View>
-      <View style={[styles.coverCaptionPanel, { backgroundColor: theme.semantic.color.mediaScrimStrong }]}>
-        <ShoplyText style={styles.coverTitle} numberOfLines={2}>
-          {issue.revision.coverTitle ?? "THIS WEEK, EDITED"}
+      <View
+        style={[
+          styles.coverTopLine,
+          { borderColor: imageUrl ? "rgba(255,255,255,0.72)" : theme.semantic.color.borderStrong }
+        ]}
+      >
+        <ShoplyText variant="caption" style={coverText}>
+          {issue.issueLabel}
         </ShoplyText>
-        {issue.revision.coverSubtitle ? (
-          <ShoplyText variant="bodyMd" style={styles.coverText} numberOfLines={3}>
-            {issue.revision.coverSubtitle}
+        <ShoplyText variant="caption" style={coverText}>
+          SHOPLY / NO. {issue.revision.revisionNumber}
+        </ShoplyText>
+      </View>
+      {blankEdition ? (
+        <View style={styles.blankCoverAside}>
+          <ShoplyText variant="caption" color="primary">
+            BUILD YOUR POINT OF VIEW · {issue.baseLayout.toUpperCase()}
           </ShoplyText>
-        ) : null}
+        </View>
+      ) : null}
+      <View
+        style={[
+          styles.coverCaptionPanel,
+          blankEdition
+            ? { borderColor: theme.semantic.color.primary }
+            : { backgroundColor: theme.semantic.color.mediaScrimStrong }
+        ]}
+      >
+        <ShoplyText
+          style={[styles.coverTitle, blankEdition ? { color: theme.semantic.color.text } : null]}
+          numberOfLines={2}
+        >
+          {issue.revision.coverTitle ?? (blankEdition ? "UNTITLED / EDITION" : "THIS WEEK, EDITED")}
+        </ShoplyText>
+        <ShoplyText variant="bodyMd" style={coverText} numberOfLines={3}>
+          {issue.revision.coverSubtitle ??
+            (blankEdition ? "빈 지면을 누르고, 당신의 리뷰로 한 장씩 완성하세요." : null)}
+        </ShoplyText>
         {(issue.revision.coverLines ?? []).length ? (
           <View style={styles.coverLines}>
             {(issue.revision.coverLines ?? []).slice(0, 3).map((line) => (
-              <ShoplyText key={line} variant="caption" style={styles.coverText} numberOfLines={1}>
+              <ShoplyText key={line} variant="caption" style={coverText} numberOfLines={1}>
                 — {line}
               </ShoplyText>
             ))}
@@ -168,25 +213,41 @@ function MagazineCover({ issue, imageUrl }: { issue: MagazineIssue; imageUrl: st
   );
 }
 
+function BlankCoverGrid({ color }: { color: string }) {
+  return (
+    <View style={styles.blankCoverGrid}>
+      {[0, 1, 2, 3, 4, 5].map((column) => (
+        <View key={column} style={[styles.blankCoverGridLine, { backgroundColor: color }]} />
+      ))}
+    </View>
+  );
+}
+
 function WordmarkBoundary({ index, scrollY }: { index: number; scrollY: SharedValue<number> }) {
   const reduceMotion = useReducedMotion();
   const estimatedCenter = 720 + index * 980;
   const direction = index % 2 === 0 ? 1 : -1;
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{
-      translateX: reduceMotion
-        ? 0
-        : interpolate(
-            scrollY.value,
-            [estimatedCenter - 520, estimatedCenter + 520],
-            [-WORDMARK_DISTANCE * direction, WORDMARK_DISTANCE * direction],
-            Extrapolation.CLAMP
-          )
-    }]
+    transform: [
+      {
+        translateX: reduceMotion
+          ? 0
+          : interpolate(
+              scrollY.value,
+              [estimatedCenter - 520, estimatedCenter + 520],
+              [-WORDMARK_DISTANCE * direction, WORDMARK_DISTANCE * direction],
+              Extrapolation.CLAMP
+            )
+      }
+    ]
   }));
 
   return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={styles.wordmarkRail}>
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.wordmarkRail}
+    >
       <Animated.View style={animatedStyle}>
         <ShoplyWordmark width={260} style={{ opacity: 0.15 }} />
       </Animated.View>
@@ -244,7 +305,15 @@ function MagazineSectionView({
           ) : null}
         </View>
       </View>
-      <View style={layout === "edit" ? styles.editGrid : layout === "zine" ? styles.zineGrid : styles.atelierGrid}>
+      <View
+        style={
+          layout === "edit"
+            ? styles.editGrid
+            : layout === "zine"
+              ? styles.zineGrid
+              : styles.atelierGrid
+        }
+      >
         {section.items.map((item, index) => (
           <MagazineItemCard
             key={item.id}
@@ -311,9 +380,12 @@ function MagazineItemCard({
     sideBySide ? styles.sideCard : null,
     layout === "zine" && index % 2 === 1 ? styles.zineCardTiltRight : null
   ];
-  const aspectRatio = facts?.mediaWidth && facts.mediaHeight
-    ? Math.min(1.35, Math.max(0.68, facts.mediaWidth / facts.mediaHeight))
-    : layout === "edit" ? 0.82 : 0.78;
+  const aspectRatio =
+    facts?.mediaWidth && facts.mediaHeight
+      ? Math.min(1.35, Math.max(0.68, facts.mediaWidth / facts.mediaHeight))
+      : layout === "edit"
+        ? 0.82
+        : 0.78;
   const disclosure = normalizeDisclosure(facts?.disclosureState);
   const cropX = numericCrop(item.cropPayload, "x", 0.5);
   const cropY = numericCrop(item.cropPayload, "y", 0.5);
@@ -328,19 +400,46 @@ function MagazineItemCard({
         onPress={() => onSelectReview?.(item.id)}
         style={({ pressed }) => [cardStyle, { opacity: pressed ? 0.78 : 1 }]}
       >
-        <View style={[styles.photoFrame, sideBySide ? styles.sidePhoto : null, styles.blankPhoto, {
-          aspectRatio: placement === "lead" ? 0.9 : layout === "edit" ? 0.82 : 0.78,
-          backgroundColor: theme.semantic.color.primarySoft,
-          borderColor: theme.semantic.color.primary
-        }]}>
+        <View
+          style={[
+            styles.photoFrame,
+            sideBySide ? styles.sidePhoto : null,
+            styles.blankPhoto,
+            {
+              aspectRatio: placement === "lead" ? 0.9 : layout === "edit" ? 0.82 : 0.78,
+              backgroundColor: theme.semantic.color.primarySoft,
+              borderColor: theme.semantic.color.primary
+            }
+          ]}
+        >
+          <View style={styles.blankSlotHeader}>
+            <ShoplyText variant="caption" color="primary">
+              GRID SLOT
+            </ShoplyText>
+            <ShoplyText style={[styles.blankSlotNumber, { color: theme.semantic.color.primary }]}>
+              {String(index + 1).padStart(2, "0")}
+            </ShoplyText>
+          </View>
           <View style={[styles.blankPlus, { backgroundColor: theme.semantic.color.primary }]}>
             <Plus size={22} color={theme.semantic.color.textInverse} />
           </View>
-          <ShoplyText variant="labelLg" color="primary">내 리뷰 선택</ShoplyText>
-          <ShoplyText variant="caption" color="textMuted">PHOTO</ShoplyText>
+          <ShoplyText variant="labelLg" color="primary">
+            내 리뷰 놓기
+          </ShoplyText>
         </View>
-        <View style={[styles.itemMeta, sideBySide ? styles.sideMeta : null, placement === "lead" ? styles.leadMeta : null]}>
-          <ShoplyText variant="caption" color="primary">EMPTY GRID / {String(index + 1).padStart(2, "0")}</ShoplyText>
+        <View
+          style={[
+            styles.itemMeta,
+            sideBySide ? styles.sideMeta : null,
+            placement === "lead" ? styles.leadMeta : null
+          ]}
+        >
+          <View
+            style={[styles.blankTextRule, { backgroundColor: theme.semantic.color.borderStrong }]}
+          />
+          <ShoplyText variant="caption" color="primary">
+            PHOTO + EDITORIAL COPY
+          </ShoplyText>
           <ShoplyText variant="bodyMd" color="textMuted">
             리뷰를 선택하면 사진과 에디토리얼 문장이 이 칸에 함께 배치됩니다.
           </ShoplyText>
@@ -351,10 +450,16 @@ function MagazineItemCard({
 
   return (
     <View style={cardStyle}>
-      <View style={[styles.photoFrame, sideBySide ? styles.sidePhoto : null, {
-        aspectRatio: placement === "lead" ? Math.max(0.86, aspectRatio) : aspectRatio,
-        backgroundColor: theme.semantic.color.surfaceMuted
-      }]}>
+      <View
+        style={[
+          styles.photoFrame,
+          sideBySide ? styles.sidePhoto : null,
+          {
+            aspectRatio: placement === "lead" ? Math.max(0.86, aspectRatio) : aspectRatio,
+            backgroundColor: theme.semantic.color.surfaceMuted
+          }
+        ]}
+      >
         {facts?.mediaUrl ? (
           <Image
             accessibilityLabel={`${facts.brandName ?? "브랜드"} ${facts.productName ?? "아이템"} 사진`}
@@ -378,19 +483,30 @@ function MagazineItemCard({
         ) : null}
       </View>
 
-      <View style={[
-        styles.itemMeta,
-        sideBySide ? styles.sideMeta : null,
-        placement === "lead" ? styles.leadMeta : null
-      ]}>
+      <View
+        style={[
+          styles.itemMeta,
+          sideBySide ? styles.sideMeta : null,
+          placement === "lead" ? styles.leadMeta : null
+        ]}
+      >
         <View style={styles.sourceRow}>
           <View style={[styles.sourcePill, { backgroundColor: theme.semantic.color.primarySoft }]}>
-            <ShoplyText variant="caption" color="primary">{sourceLabel}</ShoplyText>
+            <ShoplyText variant="caption" color="primary">
+              {sourceLabel}
+            </ShoplyText>
           </View>
           {disclosure !== "none" ? <DisclosureBadge compact state={disclosure} /> : null}
           {facts?.purchaseVerifiedStatus === "verified" ? (
-            <View style={[styles.sourcePill, { borderColor: theme.semantic.color.success, borderWidth: 1 }]}>
-              <ShoplyText variant="caption" color="success">구매인증</ShoplyText>
+            <View
+              style={[
+                styles.sourcePill,
+                { borderColor: theme.semantic.color.success, borderWidth: 1 }
+              ]}
+            >
+              <ShoplyText variant="caption" color="success">
+                구매인증
+              </ShoplyText>
             </View>
           ) : null}
         </View>
@@ -409,29 +525,60 @@ function MagazineItemCard({
               accessibilityLabel="사진 강조 위치 변경"
               icon={<Scan size={14} color={theme.semantic.color.primary} />}
               label="초점"
-              onPress={() => onChangeCrop?.(item.id, {
-                x: cropX,
-                y: cropY < 0.35 ? 0.5 : cropY < 0.65 ? 0.8 : 0.2,
-                zoom: cropZoom
-              })}
+              onPress={() =>
+                onChangeCrop?.(item.id, {
+                  x: cropX,
+                  y: cropY < 0.35 ? 0.5 : cropY < 0.65 ? 0.8 : 0.2,
+                  zoom: cropZoom
+                })
+              }
               size="sm"
               variant="tertiary"
             />
-            {onMoveItem ? <Button accessibilityLabel="아이템을 앞으로 이동" label="앞으로" onPress={() => onMoveItem(sectionId, item.id, -1)} size="sm" variant="tertiary" /> : null}
-            {onMoveItem ? <Button accessibilityLabel="아이템을 뒤로 이동" label="뒤로" onPress={() => onMoveItem(sectionId, item.id, 1)} size="sm" variant="tertiary" /> : null}
-            {onRemoveItem ? <Button accessibilityLabel="매거진에서 아이템 제거" label="제거" onPress={() => onRemoveItem(item.id)} size="sm" variant="tertiary" /> : null}
+            {onMoveItem ? (
+              <Button
+                accessibilityLabel="아이템을 앞으로 이동"
+                label="앞으로"
+                onPress={() => onMoveItem(sectionId, item.id, -1)}
+                size="sm"
+                variant="tertiary"
+              />
+            ) : null}
+            {onMoveItem ? (
+              <Button
+                accessibilityLabel="아이템을 뒤로 이동"
+                label="뒤로"
+                onPress={() => onMoveItem(sectionId, item.id, 1)}
+                size="sm"
+                variant="tertiary"
+              />
+            ) : null}
+            {onRemoveItem ? (
+              <Button
+                accessibilityLabel="매거진에서 아이템 제거"
+                label="제거"
+                onPress={() => onRemoveItem(item.id)}
+                size="sm"
+                variant="tertiary"
+              />
+            ) : null}
           </View>
         ) : null}
 
         <ShoplyText variant="caption" color="textMuted" style={styles.factualCaption}>
-          〈{facts?.merchantName ?? "SHOPLY"}, {facts?.brandName ?? "BRAND"} · {facts?.productName ?? "ITEM"}〉
+          〈{facts?.merchantName ?? "SHOPLY"}, {facts?.brandName ?? "BRAND"} ·{" "}
+          {facts?.productName ?? "ITEM"}〉
         </ShoplyText>
 
         {layout === "edit" && facts?.purchasePrice != null ? (
           <View style={styles.priceRow}>
-            <ShoplyText variant="titleMd">{formatPrice(facts.purchasePrice, facts.currency)}</ShoplyText>
+            <ShoplyText variant="titleMd">
+              {formatPrice(facts.purchasePrice, facts.currency)}
+            </ShoplyText>
             {deal ? (
-              <View style={[styles.dealBadge, { backgroundColor: theme.semantic.color.dangerFill }]}>
+              <View
+                style={[styles.dealBadge, { backgroundColor: theme.semantic.color.dangerFill }]}
+              >
                 <ShoplyText variant="labelMd" style={{ color: theme.semantic.color.textInverse }}>
                   {deal.discountPercent}% OFF
                 </ShoplyText>
@@ -462,8 +609,12 @@ function MagazineItemCard({
 
         {deal ? (
           <View style={[styles.dealPanel, { borderColor: theme.semantic.color.dangerFill }]}>
-            <ShoplyText variant="labelMd" color="danger">이번 호 {deal.discountPercent}% 특가</ShoplyText>
-            <ShoplyText variant="caption" color="textMuted">에디터 제공 정보 · {formatDate(deal.endsAt)}까지</ShoplyText>
+            <ShoplyText variant="labelMd" color="danger">
+              이번 호 {deal.discountPercent}% 특가
+            </ShoplyText>
+            <ShoplyText variant="caption" color="textMuted">
+              에디터 제공 정보 · {formatDate(deal.endsAt)}까지
+            </ShoplyText>
           </View>
         ) : null}
 
@@ -471,7 +622,10 @@ function MagazineItemCard({
           accessibilityRole="link"
           accessibilityLabel={`${facts?.authorNickname ?? "작성자"} 리뷰 원문 보기`}
           disabled={!item.reviewId}
-          onPress={() => item.reviewId && router.push({ pathname: "/review/[reviewId]", params: { reviewId: item.reviewId } })}
+          onPress={() =>
+            item.reviewId &&
+            router.push({ pathname: "/review/[reviewId]", params: { reviewId: item.reviewId } })
+          }
           style={styles.photoCredit}
         >
           <ShoplyText variant="caption" color="textMuted">
@@ -564,8 +718,10 @@ function recommendationSourceLabel(value: string) {
 }
 
 function normalizeDisclosure(value?: string): DisclosureState {
-  return ["none", "direct_purchase", "affiliate", "sponsored", "ad", "provided"].includes(value ?? "")
-    ? value as DisclosureState
+  return ["none", "direct_purchase", "affiliate", "sponsored", "ad", "provided"].includes(
+    value ?? ""
+  )
+    ? (value as DisclosureState)
     : "none";
 }
 
@@ -575,7 +731,9 @@ function formatPrice(amount: number, currency: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric" }).format(
+    new Date(value)
+  );
 }
 
 function numericCrop(payload: Record<string, unknown> | undefined, key: string, fallback: number) {
@@ -586,8 +744,54 @@ function numericCrop(payload: Record<string, unknown> | undefined, key: string, 
 const styles = StyleSheet.create({
   atelierCard: { width: "62%" },
   atelierGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  blankPhoto: { alignItems: "center", borderStyle: "dashed", borderWidth: 1.5, gap: 7, justifyContent: "center", minHeight: 168 },
-  blankPlus: { alignItems: "center", borderRadius: 999, height: 44, justifyContent: "center", width: 44 },
+  blankCoverAside: {
+    left: -56,
+    pointerEvents: "none",
+    position: "absolute",
+    top: 270,
+    transform: [{ rotate: "-90deg" }],
+    width: 250
+  },
+  blankCoverGrid: {
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    left: 20,
+    opacity: 0.09,
+    pointerEvents: "none",
+    position: "absolute",
+    right: 20,
+    top: 0
+  },
+  blankCoverGridLine: { height: "100%", width: StyleSheet.hairlineWidth },
+  blankCoverMonogram: { left: -92, top: 96 },
+  blankEditionCover: { height: 540 },
+  blankPhoto: {
+    alignItems: "center",
+    borderStyle: "dashed",
+    borderWidth: 1.2,
+    gap: 7,
+    justifyContent: "center",
+    minHeight: 168
+  },
+  blankPlus: {
+    alignItems: "center",
+    borderRadius: 999,
+    height: 44,
+    justifyContent: "center",
+    width: 44
+  },
+  blankSlotHeader: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    left: 10,
+    position: "absolute",
+    right: 10,
+    top: 8
+  },
+  blankSlotNumber: { fontFamily: "Georgia", fontSize: 22, fontWeight: "700", lineHeight: 24 },
+  blankTextRule: { height: StyleSheet.hairlineWidth, width: "100%" },
   bodyCopy: { lineHeight: 23 },
   captionCopy: { fontFamily: "Georgia", lineHeight: 26 },
   compactCard: { width: "47%" },
@@ -595,18 +799,53 @@ const styles = StyleSheet.create({
   copyActions: { flexDirection: "row", gap: 4, marginTop: 4 },
   copyBlock: { gap: 2 },
   cover: { height: 610, justifyContent: "space-between", overflow: "hidden", padding: 20 },
-  coverCaptionPanel: { alignSelf: "stretch", gap: 8, marginBottom: 8, padding: 18 },
+  coverCaptionPanel: {
+    alignSelf: "stretch",
+    borderTopWidth: 1,
+    gap: 8,
+    marginBottom: 8,
+    padding: 18
+  },
   coverLines: { gap: 3, marginTop: 6 },
-  coverMonogram: { left: -74, position: "absolute", top: 86 },
-  coverText: { color: "#FFFFFF", textShadowColor: "rgba(0,0,0,0.35)", textShadowOffset: { height: 1, width: 0 }, textShadowRadius: 4 },
-  coverTitle: { color: "#FFFFFF", fontFamily: "Georgia", fontSize: 42, fontWeight: "700", letterSpacing: -1.8, lineHeight: 45 },
-  coverTopLine: { borderBottomWidth: 1, flexDirection: "row", justifyContent: "space-between", paddingBottom: 10 },
+  coverMonogram: { left: -74, pointerEvents: "none", position: "absolute", top: 86 },
+  coverText: {
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { height: 1, width: 0 },
+    textShadowRadius: 4
+  },
+  coverTitle: {
+    color: "#FFFFFF",
+    fontFamily: "Georgia",
+    fontSize: 42,
+    fontWeight: "700",
+    letterSpacing: -1.8,
+    lineHeight: 45
+  },
+  coverTopLine: {
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: 10
+  },
   dealBadge: { borderRadius: 4, paddingHorizontal: 7, paddingVertical: 4 },
   dealPanel: { borderLeftWidth: 3, gap: 2, marginTop: 6, paddingLeft: 10 },
-  disclosureRow: { flexDirection: "row", gap: 12, justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
+  disclosureRow: {
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 12
+  },
   editCard: { width: "48%" },
   editGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  editorLetter: { borderLeftWidth: 2, gap: 12, marginHorizontal: 26, marginVertical: 46, paddingLeft: 20 },
+  editorLetter: {
+    borderLeftWidth: 2,
+    gap: 12,
+    marginHorizontal: 26,
+    marginVertical: 46,
+    paddingLeft: 20
+  },
   factualCaption: { fontFamily: "Georgia", marginTop: 2 },
   itemCard: { marginBottom: 38 },
   itemMeta: { gap: 9, paddingTop: 10 },
@@ -624,18 +863,52 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 20, paddingVertical: 18 },
   sectionHeading: { alignItems: "flex-start", flexDirection: "row", gap: 12, marginBottom: 34 },
   sectionIntro: { alignSelf: "flex-end", lineHeight: 22, marginTop: 10, width: "82%" },
-  sectionTitle: { fontFamily: "Georgia", fontSize: 32, fontWeight: "700", letterSpacing: -1.2, lineHeight: 38 },
+  sectionTitle: {
+    fontFamily: "Georgia",
+    fontSize: 32,
+    fontWeight: "700",
+    letterSpacing: -1.2,
+    lineHeight: 38
+  },
   serifBody: { fontFamily: "Georgia", lineHeight: 28 },
   sideCard: { alignItems: "flex-start", flexDirection: "row", gap: 14, width: "100%" },
   sideMeta: { flex: 1, paddingTop: 0 },
   sidePhoto: { width: "46%" },
-  sourcePill: { alignItems: "center", borderRadius: 999, justifyContent: "center", minHeight: 24, paddingHorizontal: 8 },
+  sourcePill: {
+    alignItems: "center",
+    borderRadius: 999,
+    justifyContent: "center",
+    minHeight: 24,
+    paddingHorizontal: 8
+  },
   sourceRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 },
   uppercase: { letterSpacing: 1.2 },
-  wordmarkRail: { alignItems: "center", height: 78, justifyContent: "center", overflow: "hidden" },
+  wordmarkRail: {
+    alignItems: "center",
+    height: 78,
+    justifyContent: "center",
+    overflow: "hidden",
+    pointerEvents: "none"
+  },
   zineCard: { transform: [{ rotate: "-1deg" }], width: "70%" },
   zineCardTiltRight: { transform: [{ rotate: "1.6deg" }] },
   zineGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 2 },
-  zineNumber: { alignItems: "center", bottom: 10, height: 38, justifyContent: "center", position: "absolute", right: -7, transform: [{ rotate: "6deg" }], width: 42 },
-  zineTitle: { fontFamily: undefined, fontSize: 38, fontWeight: "900", letterSpacing: -2, lineHeight: 40, textTransform: "uppercase" }
+  zineNumber: {
+    alignItems: "center",
+    bottom: 10,
+    height: 38,
+    justifyContent: "center",
+    position: "absolute",
+    right: -7,
+    transform: [{ rotate: "6deg" }],
+    width: 42
+  },
+  zineTitle: {
+    fontFamily: undefined,
+    fontSize: 38,
+    fontWeight: "900",
+    letterSpacing: -2,
+    lineHeight: 40,
+    textTransform: "uppercase"
+  }
 });
