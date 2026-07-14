@@ -42,6 +42,28 @@ import { goBackOrReplace } from "@/shared/lib/navigation";
 import { ShoplySMonogram, ShoplyWordmark } from "@/shared/ui/brand";
 import { MagazineIssueViewer } from "@/widgets/magazine-issue-viewer";
 
+const MAGAZINE_EDITORIAL_TEXT_LIMITS = {
+  atelier: { caption: 44, body: 72, editorLetter: 180 },
+  zine: { caption: 28, body: 44, editorLetter: 120 },
+  edit: { caption: 32, body: 56, editorLetter: 150 }
+} as const satisfies Record<MagazineLayout, {
+  caption: number;
+  body: number;
+  editorLetter: number;
+}>;
+
+function editorialBlockLimit(issue: MagazineIssue, block: MagazineEditorialBlock | null) {
+  const sectionLayout = block
+    ? issue.sections.find((section) =>
+        section.items.some(
+          (item) => item.editorialCaption?.id === block.id || item.body?.id === block.id
+        )
+      )?.layoutOverride
+    : null;
+  const limits = MAGAZINE_EDITORIAL_TEXT_LIMITS[sectionLayout ?? issue.baseLayout];
+  return block?.blockType === "caption" ? limits.caption : limits.body;
+}
+
 export function MagazineDetailPage() {
   const { issueId } = useLocalSearchParams<{ issueId?: string }>();
   const theme = useShoplyTheme();
@@ -198,6 +220,7 @@ export function MagazineEditPage() {
     issue.sections
       .flatMap((section) => section.items)
       .findIndex((item) => item.id === sourceSlotId) + 1;
+  const editingBlockMaxLength = editorialBlockLimit(issue, editingBlock);
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: theme.semantic.color.background }}
@@ -272,7 +295,7 @@ export function MagazineEditPage() {
         <TextInput
           accessibilityLabel="에디토리얼 문장"
           multiline
-          maxLength={editingBlock?.blockType === "caption" ? 60 : 150}
+          maxLength={editingBlockMaxLength}
           onChangeText={setDraftText}
           placeholder="잡지 문장을 입력하세요"
           placeholderTextColor={theme.semantic.color.textMuted}
@@ -283,11 +306,19 @@ export function MagazineEditPage() {
           value={draftText}
         />
         <View style={styles.sheetFooter}>
-          <ShoplyText variant="caption" color="textMuted">
-            {draftText.length}/{editingBlock?.blockType === "caption" ? 60 : 150}
+          <ShoplyText
+            variant="caption"
+            color={draftText.length > editingBlockMaxLength ? "danger" : "textMuted"}
+          >
+            지면 권장 길이 {draftText.length}/{editingBlockMaxLength}
           </ShoplyText>
           <Button
-            disabled={!editingBlock || !draftText.trim() || updateBlock.isPending}
+            disabled={
+              !editingBlock ||
+              !draftText.trim() ||
+              draftText.length > editingBlockMaxLength ||
+              updateBlock.isPending
+            }
             label={updateBlock.isPending ? "저장 중" : "문장 저장"}
             onPress={async () => {
               if (!editingBlock) return;
@@ -694,7 +725,7 @@ function MagazineEditorPanel({
       <EditorInput label="표지 부제" maxLength={45} value={subtitle} onChangeText={setSubtitle} />
       <EditorInput
         label="에디터 레터"
-        maxLength={500}
+        maxLength={MAGAZINE_EDITORIAL_TEXT_LIMITS[issue.baseLayout].editorLetter}
         multiline
         value={letter}
         onChangeText={setLetter}
