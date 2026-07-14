@@ -57,7 +57,7 @@ export function MagazineIssueViewer({
     scrollY.value = event.contentOffset.y;
   });
   const coverItem = issue.sections.flatMap((section) => section.items)[0];
-  const coverImage = coverItem?.facts?.mediaUrl ?? null;
+  const coverImage = issue.coverImageUrl ?? coverItem?.facts?.mediaUrl ?? null;
   const dealsByItem = useMemo(() => {
     const map = new Map<string, MagazineDeal>();
     for (const deal of issue.deals) if (deal.itemId) map.set(deal.itemId, deal);
@@ -233,7 +233,7 @@ function MagazineSectionView({
             {section.title}
           </ShoplyText>
           {section.intro ? (
-            <ShoplyText variant="bodyMd" color="textMuted" style={{ marginTop: 6 }}>
+            <ShoplyText variant="bodyMd" color="textMuted" style={styles.sectionIntro}>
               {section.intro}
             </ShoplyText>
           ) : null}
@@ -292,11 +292,17 @@ function MagazineItemCard({
   const theme = useShoplyTheme();
   const facts = item.facts;
   const sourceLabel = recommendationSourceLabel(item.recommendationSource);
-  const cardStyle = layout === "edit"
-    ? styles.editCard
-    : layout === "zine"
-      ? [styles.zineCard, index % 3 === 1 ? styles.zineCardOffset : null]
-      : [styles.atelierCard, index % 3 === 0 ? styles.atelierHeroCard : null];
+  const placement = editorialPlacement(layout, index, canEdit);
+  const sideBySide = placement === "side";
+  const cardStyle = [
+    styles.itemCard,
+    layout === "edit" ? styles.editCard : layout === "zine" ? styles.zineCard : styles.atelierCard,
+    placement === "lead" ? styles.leadCard : null,
+    placement === "compact" ? styles.compactCard : null,
+    placement === "offset" ? styles.offsetCard : null,
+    sideBySide ? styles.sideCard : null,
+    layout === "zine" && index % 2 === 1 ? styles.zineCardTiltRight : null
+  ];
   const aspectRatio = facts?.mediaWidth && facts.mediaHeight
     ? Math.min(1.35, Math.max(0.68, facts.mediaWidth / facts.mediaHeight))
     : layout === "edit" ? 0.82 : 0.78;
@@ -307,7 +313,10 @@ function MagazineItemCard({
 
   return (
     <View style={cardStyle}>
-      <View style={[styles.photoFrame, { aspectRatio, backgroundColor: theme.semantic.color.surfaceMuted }]}>
+      <View style={[styles.photoFrame, sideBySide ? styles.sidePhoto : null, {
+        aspectRatio: placement === "lead" ? Math.max(0.86, aspectRatio) : aspectRatio,
+        backgroundColor: theme.semantic.color.surfaceMuted
+      }]}>
         {facts?.mediaUrl ? (
           <Image
             accessibilityLabel={`${facts.brandName ?? "브랜드"} ${facts.productName ?? "아이템"} 사진`}
@@ -331,7 +340,11 @@ function MagazineItemCard({
         ) : null}
       </View>
 
-      <View style={styles.itemMeta}>
+      <View style={[
+        styles.itemMeta,
+        sideBySide ? styles.sideMeta : null,
+        placement === "lead" ? styles.leadMeta : null
+      ]}>
         <View style={styles.sourceRow}>
           <View style={[styles.sourcePill, { backgroundColor: theme.semantic.color.primarySoft }]}>
             <ShoplyText variant="caption" color="primary">{sourceLabel}</ShoplyText>
@@ -383,6 +396,7 @@ function MagazineItemCard({
 
         <EditorialCopy
           block={item.editorialCaption}
+          emphasis={placement === "lead" ? "lead" : placement === "compact" ? "compact" : "default"}
           canEdit={canEdit}
           onEdit={onEditBlock}
           onRegenerate={onRegenerateBlock}
@@ -392,6 +406,7 @@ function MagazineItemCard({
           <EditorialCopy
             block={item.body}
             body
+            emphasis={placement === "compact" ? "compact" : "default"}
             canEdit={canEdit}
             onEdit={onEditBlock}
             onRegenerate={onRegenerateBlock}
@@ -425,6 +440,7 @@ function MagazineItemCard({
 function EditorialCopy({
   block,
   body = false,
+  emphasis = "default",
   canEdit,
   onEdit,
   onRegenerate,
@@ -432,6 +448,7 @@ function EditorialCopy({
 }: {
   block?: MagazineEditorialBlock | null;
   body?: boolean;
+  emphasis?: "default" | "lead" | "compact";
   canEdit: boolean;
   onEdit?: (block: MagazineEditorialBlock) => void;
   onRegenerate?: (block: MagazineEditorialBlock) => void;
@@ -441,7 +458,14 @@ function EditorialCopy({
   if (!block) return null;
   return (
     <View style={styles.copyBlock}>
-      <ShoplyText variant={body ? "bodyMd" : "bodyLg"} style={body ? styles.bodyCopy : styles.captionCopy}>
+      <ShoplyText
+        variant={body || emphasis === "compact" ? "bodyMd" : "bodyLg"}
+        style={[
+          body ? styles.bodyCopy : styles.captionCopy,
+          !body && emphasis === "lead" ? styles.leadCaptionCopy : null,
+          emphasis === "compact" ? styles.compactCopy : null
+        ]}
+      >
         {block.text}
       </ShoplyText>
       {canEdit ? (
@@ -467,6 +491,24 @@ function EditorialCopy({
       ) : null}
     </View>
   );
+}
+
+function editorialPlacement(layout: MagazineLayout, index: number, canEdit: boolean) {
+  if (canEdit) return "lead" as const;
+  if (layout === "edit") {
+    if (index % 5 === 0) return "side" as const;
+    return "compact" as const;
+  }
+  if (layout === "zine") {
+    if (index % 4 === 0) return "lead" as const;
+    if (index % 4 === 1) return "compact" as const;
+    if (index % 4 === 2) return "offset" as const;
+    return "side" as const;
+  }
+  if (index % 5 === 0) return "lead" as const;
+  if (index % 5 === 1 || index % 5 === 2) return "compact" as const;
+  if (index % 5 === 3) return "side" as const;
+  return "offset" as const;
 }
 
 function recommendationSourceLabel(value: string) {
@@ -497,11 +539,12 @@ function numericCrop(payload: Record<string, unknown> | undefined, key: string, 
 }
 
 const styles = StyleSheet.create({
-  atelierCard: { marginBottom: 34, width: "64%" },
+  atelierCard: { width: "62%" },
   atelierGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  atelierHeroCard: { marginLeft: "12%", width: "88%" },
   bodyCopy: { lineHeight: 23 },
   captionCopy: { fontFamily: "Georgia", lineHeight: 26 },
+  compactCard: { width: "47%" },
+  compactCopy: { fontSize: 14, lineHeight: 20 },
   copyActions: { flexDirection: "row", gap: 4, marginTop: 4 },
   copyBlock: { gap: 2 },
   cover: { height: 610, justifyContent: "space-between", overflow: "hidden", padding: 20 },
@@ -514,29 +557,38 @@ const styles = StyleSheet.create({
   dealBadge: { borderRadius: 4, paddingHorizontal: 7, paddingVertical: 4 },
   dealPanel: { borderLeftWidth: 3, gap: 2, marginTop: 6, paddingLeft: 10 },
   disclosureRow: { flexDirection: "row", gap: 12, justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
-  editCard: { marginBottom: 30, width: "48%" },
+  editCard: { width: "48%" },
   editGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
   editorLetter: { borderLeftWidth: 2, gap: 12, marginHorizontal: 26, marginVertical: 46, paddingLeft: 20 },
   factualCaption: { fontFamily: "Georgia", marginTop: 2 },
+  itemCard: { marginBottom: 38 },
   itemMeta: { gap: 9, paddingTop: 10 },
   issueNumber: { alignItems: "center", height: 30, justifyContent: "center", width: 30 },
   itemEditActions: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 2 },
+  leadCaptionCopy: { fontSize: 23, letterSpacing: -0.5, lineHeight: 30 },
+  leadCard: { width: "100%" },
+  leadMeta: { alignSelf: "flex-end", width: "84%" },
+  offsetCard: { marginLeft: "34%", width: "66%" },
   photoCredit: { minHeight: 34, justifyContent: "center" },
   photoFallback: { alignItems: "center", flex: 1, justifyContent: "center" },
   photoFrame: { overflow: "hidden", width: "100%" },
   priceRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 },
   scrollContent: { paddingBottom: 120 },
   section: { paddingHorizontal: 20, paddingVertical: 18 },
-  sectionHeading: { alignItems: "flex-start", flexDirection: "row", gap: 12, marginBottom: 28 },
+  sectionHeading: { alignItems: "flex-start", flexDirection: "row", gap: 12, marginBottom: 34 },
+  sectionIntro: { alignSelf: "flex-end", lineHeight: 22, marginTop: 10, width: "82%" },
   sectionTitle: { fontFamily: "Georgia", fontSize: 32, fontWeight: "700", letterSpacing: -1.2, lineHeight: 38 },
   serifBody: { fontFamily: "Georgia", lineHeight: 28 },
+  sideCard: { alignItems: "flex-start", flexDirection: "row", gap: 14, width: "100%" },
+  sideMeta: { flex: 1, paddingTop: 0 },
+  sidePhoto: { width: "46%" },
   sourcePill: { alignItems: "center", borderRadius: 999, justifyContent: "center", minHeight: 24, paddingHorizontal: 8 },
   sourceRow: { alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 6 },
   uppercase: { letterSpacing: 1.2 },
   wordmarkRail: { alignItems: "center", height: 78, justifyContent: "center", overflow: "hidden" },
-  zineCard: { marginBottom: 28, transform: [{ rotate: "-1deg" }], width: "58%" },
-  zineCardOffset: { marginLeft: "38%", transform: [{ rotate: "2deg" }] },
-  zineGrid: { paddingHorizontal: 2 },
+  zineCard: { transform: [{ rotate: "-1deg" }], width: "70%" },
+  zineCardTiltRight: { transform: [{ rotate: "1.6deg" }] },
+  zineGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 2 },
   zineNumber: { alignItems: "center", bottom: 10, height: 38, justifyContent: "center", position: "absolute", right: -7, transform: [{ rotate: "6deg" }], width: 42 },
   zineTitle: { fontFamily: undefined, fontSize: 38, fontWeight: "900", letterSpacing: -2, lineHeight: 40, textTransform: "uppercase" }
 });

@@ -5,6 +5,7 @@ export {
   useMagazineGenerationJob,
   useMagazineIssue,
   useMyMagazines,
+  usePublicProfileMagazines,
   useSubscribedMagazines
 } from "./api/magazine-queries";
 export { isMagazineGeneratingStatus } from "./model/status";

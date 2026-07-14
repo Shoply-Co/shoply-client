@@ -3447,6 +3447,8 @@ export interface MagazineIssue {
   visibility: MagazineIssueVisibility;
   status: string;
   baseLayout: MagazineLayout;
+  /** @nullable */
+  coverImageUrl: string | null;
   personalizationConfidence: number;
   /** @nullable */
   publishedAt?: string | null;
@@ -6521,6 +6523,42 @@ export const getProfilesUserIdReviews = async (userId: string,
     params?: GetProfilesUserIdReviewsParams, options?: RequestInit): Promise<getProfilesUserIdReviewsResponse> => {
 
   return shoplyFetch<getProfilesUserIdReviewsResponse>(getGetProfilesUserIdReviewsUrl(userId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listPublicProfileMagazinesResponse200 = {
+  data: MagazineSummaryListEnvelope
+  status: 200
+}
+
+export type listPublicProfileMagazinesResponseSuccess = (listPublicProfileMagazinesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listPublicProfileMagazinesResponse = (listPublicProfileMagazinesResponseSuccess)
+
+export const getListPublicProfileMagazinesUrl = (userId: string,) => {
+
+
+
+
+  return `/profiles/${userId}/magazines`
+}
+
+/**
+ * @summary List the profile owner's public published custom magazine issues
+ */
+export const listPublicProfileMagazines = async (userId: string, options?: RequestInit): Promise<listPublicProfileMagazinesResponse> => {
+
+  return shoplyFetch<listPublicProfileMagazinesResponse>(getListPublicProfileMagazinesUrl(userId),
   {
     ...options,
     method: 'GET'

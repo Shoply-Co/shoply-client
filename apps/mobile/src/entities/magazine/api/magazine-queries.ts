@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/shared/api/client";
+import { listPublicProfileMagazines } from "@/shared/api/generated/shoply";
 import type {
   MagazineGenerationJob,
   MagazineCustomSource,
@@ -11,6 +12,7 @@ import { isMagazineGeneratingStatus } from "../model/status";
 export const magazineKeys = {
   all: ["magazines"] as const,
   mine: () => [...magazineKeys.all, "mine"] as const,
+  profile: (userId: string) => [...magazineKeys.all, "profile", userId] as const,
   subscriptions: () => [...magazineKeys.all, "subscriptions"] as const,
   discover: () => [...magazineKeys.all, "discover"] as const,
   issue: (issueId: string) => [...magazineKeys.all, "issue", issueId] as const,
@@ -18,11 +20,25 @@ export const magazineKeys = {
   sources: () => [...magazineKeys.all, "custom-sources"] as const
 };
 
-export function useMyMagazines() {
+export function useMyMagazines(enabled = true) {
   return useQuery({
     queryKey: magazineKeys.mine(),
     queryFn: () => apiRequest<MagazineSummary[]>("/magazines/mine"),
+    enabled,
     staleTime: 5 * 60 * 1000,
+    retry: 1
+  });
+}
+
+export function usePublicProfileMagazines(userId?: string, enabled = true) {
+  return useQuery({
+    queryKey: magazineKeys.profile(userId ?? "missing"),
+    queryFn: () => {
+      if (!userId) throw new Error("userId is required");
+      return listPublicProfileMagazines(userId).then((response) => response.data.data);
+    },
+    enabled: Boolean(userId) && enabled,
+    staleTime: 2 * 60 * 1000,
     retry: 1
   });
 }
